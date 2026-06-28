@@ -190,6 +190,21 @@ local function cmdVolume(cfg, parsed)
   print(string.format("Volume %s: %.1f", parsed.flags.global and "global" or "local", v))
 end
 
+local INSTALL_URL = "https://raw.githubusercontent.com/VIL-CIEL/CC_Radio_System_Music_Player/main/install.lua"
+
+-- Installe / met à jour via install.lua (téléchargé si absent).
+local function cmdInstall(_cfg, _parsed)
+  if not fs.exists("install.lua") then
+    if not http then printError("HTTP desactive cote serveur."); return end
+    print("Telechargement de l'installeur...")
+    local r = http.get(INSTALL_URL)
+    if not r then printError("Impossible de telecharger install.lua."); return end
+    local data = r.readAll(); r.close()
+    local f = fs.open("install.lua", "w"); f.write(data); f.close()
+  end
+  shell.run("install.lua")
+end
+
 -- Commandes de contrôle non actionnables en autonome (clavier en lecture, réseau en S3/S4).
 local function cmdRuntimeInfo(command)
   printError("'" .. command .. "' n'agit pas en mode autonome.")
@@ -202,20 +217,31 @@ local function main(...)
   local parsed = Utils.parseArgs(argv)
   local command = parsed.positional[1] or "help"
   local cfg = Config.load()
-  local _log = Logger.new({ level = cfg.log_level })
+  local log = Logger.new({ level = cfg.log_level, toTerm = false })
+  log:info("commande: " .. command)
+
+  -- Exécute fn en capturant les erreurs (sauf interruption Ctrl+T) -> log + message clair.
+  local function guard(fn)
+    local ok, err = pcall(fn, cfg, parsed)
+    if not ok and not tostring(err):find("Terminated") then
+      log:error(command .. ": " .. tostring(err))
+      printError("Erreur: " .. tostring(err))
+      printError("Details: " .. log.path)
+    end
+  end
 
   if command == "help" then
     Help.show(parsed.positional[2])
   elseif command == "config" then
     cmdConfig(cfg, parsed)
   elseif command == "broadcaster" then
-    cmdBroadcaster(cfg, parsed)
+    guard(cmdBroadcaster)
   elseif command == "client" then
-    if checkMode(cfg, "client") then Client.run(cfg, parsed) end
+    if checkMode(cfg, "client") then guard(Client.run) end
   elseif command == "local" then
-    cmdPlayLocal(cfg, parsed)
+    guard(cmdPlayLocal)
   elseif command == "play" then
-    cmdPlay(cfg, parsed)
+    guard(cmdPlay)
   elseif command == "queue" then
     cmdQueue(cfg, parsed)
   elseif command == "loop" then
@@ -225,7 +251,7 @@ local function main(...)
   elseif command == "volume" then
     cmdVolume(cfg, parsed)
   elseif command == "install" then
-    notImplemented("6", "install")
+    cmdInstall(cfg, parsed)
   elseif Utils.contains(CONTROL_CMDS, command) then
     cmdRuntimeInfo(command)
   else

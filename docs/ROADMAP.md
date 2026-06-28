@@ -15,7 +15,7 @@
 | S3 | `v0.4.0` | Broadcaster réseau (audio/meta/cmd/disco) | ✅ Fait |
 | S4 | `v0.5.0` | Client réseau (réception, décodage, resync) | ✅ Fait |
 | S5 | `v0.6.0` | GUI Monitor (widgets, layouts, touch, mode dual) | ✅ Fait |
-| S6 | `v1.0.0` | Polish, installeur, robustesse, README final | ⏳ |
+| S6 | `v1.0.0` | Polish, installeur, robustesse, README final | ✅ Fait |
 
 ## Détail des sprints
 
@@ -85,10 +85,24 @@
 - Validation : 17/17 headless (widgets + GUI sur monitor simulé + intégration `monitor_touch`). LuaLS clean.
 - ⚠️ Rendu visuel & tactile réels : à valider en jeu.
 
-### S6 — Polish & Distribution (`v1.0.0`)
-- `install.lua` (wget/pastebin), `--update`.
-- Robustesse : retry HTTP, reconnexion client, gestion d'erreurs globale + logger.
-- README final (fonctionnement, installation, prérequis MC, guide d'amélioration, crédits).
+### S6 — Polish & Distribution (`v1.0.0`) ✅
+- `install.lua` autonome (wget) + commande `install` (téléchargement + maj de tous les fichiers).
+- Robustesse : retry HTTP (`http_retries`), reconnexion client auto (S4), garde anti-crash globale
+  (pcall + journalisation `CC_Radio.log`, ignore Ctrl+T).
+- `docs/startup.example.lua` : auto-restart au boot.
+- README final complet (présentation, install, commandes, config, fonctionnement interne,
+  protocole, guide d'extension, dépannage, crédits terreng).
+- Validation : 12/13 + 5/5 headless (retry HTTP, régression routage, installeur + makeDir). LuaLS clean.
+
+## Reste à valider en jeu (non testable en headless)
+- Rendu audio audible (broadcaster local + clients).
+- Synchro réelle broadcaster ↔ client sur 2+ machines (rednet réel).
+- Rendu visuel et tactile du GUI monitor.
+
+## Idées post-1.0 (v1.1+)
+- Sécurité réseau (token de session partagé) — rednet non chiffré.
+- Synchronisation plus fine des clients (buffer basé sur seq/horloge).
+- Stubs de types CC:T pour LuaLS (autocomplétion complète).
 
 ## Risques techniques suivis
 - **Sérialisation binaire rednet** (levé en S0, à re-mesurer en jeu en S3).

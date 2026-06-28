@@ -9,6 +9,18 @@
 ]]
 local Downloader = {}
 
+-- http.get avec quelques tentatives (robustesse réseau).
+local function httpGet(url, headers, binary, retries)
+  retries = retries or 0
+  local r, err
+  for attempt = 0, retries do
+    r, err = http.get(url, headers, binary)
+    if r then return r end
+    if attempt < retries then os.sleep(1) end
+  end
+  return nil, (tostring(err) .. " (apres " .. (retries + 1) .. " tentatives)")
+end
+
 function Downloader.searchUrl(cfg, query)
   return cfg.api_url .. "?v=" .. textutils.urlEncode(cfg.api_version)
       .. "&search=" .. textutils.urlEncode(query)
@@ -22,7 +34,7 @@ end
 --- Recherche synchrone.
 -- @return table|nil results, string|nil err
 function Downloader.search(cfg, query)
-  local r, err = http.get(Downloader.searchUrl(cfg, query))
+  local r, err = httpGet(Downloader.searchUrl(cfg, query), nil, false, cfg.http_retries)
   if not r then return nil, "Echec de la recherche: " .. tostring(err) end
   local body = r.readAll()
   r.close()
@@ -41,7 +53,7 @@ Downloader.Stream = Stream
 --- Ouvre un flux binaire pour un id.
 -- @return Stream|nil stream, string|nil err
 function Downloader.openStream(cfg, id)
-  local h, err = http.get(Downloader.downloadUrl(cfg, id), nil, true) -- binary
+  local h, err = httpGet(Downloader.downloadUrl(cfg, id), nil, true, cfg.http_retries) -- binary
   if not h then return nil, "Echec du telechargement: " .. tostring(err) end
   local chunkBytes = (cfg.chunk_size_kb or 16) * 1024
   return setmetatable({
