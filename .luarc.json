@@ -1,0 +1,12 @@
+{
+  "$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
+  "runtime.version": "Lua 5.1",
+  "diagnostics.globals": [
+    "fs", "term", "peripheral", "redstone", "rs", "rednet", "textutils",
+    "colors", "colours", "paintutils", "parallel", "vector", "gps",
+    "settings", "keys", "http", "window", "shell", "multishell", "disk",
+    "commands", "turtle", "pocket", "printError", "write", "read", "sleep"
+  ],
+  "diagnostics.disable": ["lowercase-global"],
+  "workspace.library": []
+}
