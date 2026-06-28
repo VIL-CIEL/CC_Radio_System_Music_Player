@@ -12,7 +12,7 @@
 | S0 | `v0.1.0` | Fondations : structure, entry point, prérequis, config/logger/utils, parsing CLI, aide | ✅ Fait |
 | S1 | `v0.2.0` | Audio local standalone (download → decode → play) | ✅ Fait |
 | S2 | `v0.3.0` | Playlist + contrôles CLI interactifs + persistance | ✅ Fait |
-| S3 | `v0.4.0` | Broadcaster réseau (audio/meta/cmd/disco) | ⏳ |
+| S3 | `v0.4.0` | Broadcaster réseau (audio/meta/cmd/disco) | ✅ Fait |
 | S4 | `v0.5.0` | Client réseau (réception, décodage, resync) | ⏳ |
 | S5 | `v0.6.0` | GUI Monitor (widgets, layouts, touch, mode dual) | ⏳ |
 | S6 | `v1.0.0` | Polish, installeur, robustesse, README final | ⏳ |
@@ -51,11 +51,18 @@
 - Touches lecteur : P pause · S skip · B prev · +/- volume · L loop · Z shuffle · Q queue · A add · X exit.
 - Validation : 39/39 tests headless (logique + commandes persistées + smoke lecteur), LuaLS clean.
 
-### S3 — Broadcaster Réseau (`v0.4.0`)
-- Lever le choix d'encodage (raw vs base64) via mesure en jeu.
-- `core/network.lua` : protocoles `CC_RSMP_AUDIO/META/CMD/ACK/DISCO`.
-- `core/broadcaster.lua` : `parallel.waitForAll(audioLoop, networkLoop, uiLoop, discoveryLoop)`.
-- Broadcast chunks + `seq`, META (5 s), DISCO (30 s), exécution des CMD, `--no-speaker`.
+### S3 — Broadcaster Réseau (`v0.4.0`) ✅
+- **Encodage tranché : base64 par défaut** (~1,34× vs 3,23× raw ; ~6 ms encode/décode). `lib/base64.lua`.
+- `core/network.lua` : protocoles `CC_RSMP_AUDIO/META/CMD/ACK/DISCO`, encode/decode chunk, transport rednet.
+- `core/broadcaster.lua` : `parallel.waitForAny(audioLoop, networkLoop, metaLoop, discoveryLoop, uiLoop)`,
+  état partagé + handler de commandes unique (clavier local ET rednet distant).
+- Broadcast chunks DFPWM + `seq`, audio_stop, META (5 s), DISCO announce (30 s) + prune clients,
+  exécution CMD (pause/resume/skip/prev/stop/volume/loop/shuffle/play/queue/status) + ACK, `--no-speaker`
+  (cadençage manuel ~ temps réel quand pas de lecture locale).
+- `play` sans `--local` = raccourci broadcaster ; `broadcaster --local` = lecture solo.
+- Validation : 17/17 headless (base64/réseau + resolveSong live + smoke broadcaster complet avec
+  modem/speaker émulés, stream simulé, CMD injecté). LuaLS clean.
+- ⚠️ Sync réelle broadcaster↔client à valider en jeu (1 ordi émulé = 1 identité rednet) — fait en S4.
 
 ### S4 — Client Réseau (`v0.5.0`)
 - `core/client.lua` : écoute, décodage local, playback, volume local indépendant.

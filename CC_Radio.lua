@@ -18,11 +18,12 @@ local Utils      = require("lib.utils")
 local Config     = require("lib.config")
 local Logger     = require("lib.logger")
 local Prereq     = require("core.prereq")
-local Downloader = require("core.downloader")
-local Playlist   = require("core.playlist")
-local Player     = require("core.player")
-local CLI        = require("ui.cli")
-local Help       = require("ui.help")
+local Downloader  = require("core.downloader")
+local Playlist    = require("core.playlist")
+local Player      = require("core.player")
+local Broadcaster = require("core.broadcaster")
+local CLI         = require("ui.cli")
+local Help        = require("ui.help")
 
 local CONTROL_CMDS = { "status", "stop", "skip", "pause", "resume", "prev" }
 
@@ -62,17 +63,12 @@ local function cmdConfig(cfg, parsed)
   end
 end
 
-local function cmdMode(cfg, command)
-  local r = Prereq.check(command)
-  print(("CC_Radio v%s - verification (%s)..."):format(VERSION, command))
+-- Vérifie les prérequis d'un mode et les affiche. @return boolean ok
+local function checkMode(cfg, mode)
+  local r = Prereq.check(mode)
+  print(("CC_Radio v%s - %s..."):format(VERSION, mode))
   printPrereq(r)
-  if not r.ok then return end
-  print("Prerequis OK.")
-  if command == "broadcaster" then
-    notImplemented("3", "broadcaster")
-  elseif command == "client" then
-    notImplemented("4", "client")
-  end
+  return r.ok
 end
 
 -- Charge la playlist persistée avec les paramètres issus de la config.
@@ -105,11 +101,22 @@ local function cmdPlayLocal(cfg, parsed)
   Player.runLocal(cfg, pl)
 end
 
+-- Démarre le mode broadcaster (serveur radio).
+local function cmdBroadcaster(cfg, parsed)
+  if parsed.flags["local"] then
+    cmdPlayLocal(cfg, parsed) -- broadcaster --local = lecture solo
+    return
+  end
+  if not checkMode(cfg, "broadcaster") then return end
+  Broadcaster.run(cfg, parsed)
+end
+
 local function cmdPlay(cfg, parsed)
   if parsed.flags["local"] then
     cmdPlayLocal(cfg, parsed)
   else
-    notImplemented("3", "play (broadcaster) - utilisez --local pour la lecture solo")
+    -- raccourci : lance le broadcaster en y ajoutant la chanson demandée.
+    cmdBroadcaster(cfg, parsed)
   end
 end
 
@@ -200,8 +207,10 @@ local function main(...)
     Help.show(parsed.positional[2])
   elseif command == "config" then
     cmdConfig(cfg, parsed)
-  elseif command == "broadcaster" or command == "client" then
-    cmdMode(cfg, command)
+  elseif command == "broadcaster" then
+    cmdBroadcaster(cfg, parsed)
+  elseif command == "client" then
+    if checkMode(cfg, "client") then notImplemented("4", "client") end
   elseif command == "local" then
     cmdPlayLocal(cfg, parsed)
   elseif command == "play" then

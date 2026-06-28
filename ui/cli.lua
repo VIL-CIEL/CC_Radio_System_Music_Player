@@ -159,6 +159,56 @@ function CLI.showQueue(playlist)
   os.pullEvent("char")
 end
 
+--- Écran du broadcaster (S3).
+-- @param state { label, id, song, elapsed, duration, seq, playbackState }
+function CLI.drawBroadcaster(state, playlist, audio, localPlay, nClients, encoding)
+  term.setBackgroundColor(colors.black)
+  term.clear()
+  term.setCursorPos(1, 1)
+
+  color(colors.yellow); term.write("== CC_Radio [BROADCASTER] ")
+  if state.playbackState == "playing" then color(colors.red); term.write("* ON AIR")
+  else color(colors.gray); term.write("o IDLE") end
+  color(colors.white); print(""); print("")
+
+  print('Station: "' .. (state.label or "?") .. '"   ID: ' .. tostring(state.id))
+  print("")
+
+  if state.song then
+    print(Utils.trim(state.song.name) or "?")
+    color(colors.lightGray); print(Utils.trim(state.song.artist) or ""); color(colors.white)
+  else
+    color(colors.lightGray); print("(rien en lecture)"); color(colors.white); print("")
+  end
+  print("")
+
+  local dur  = state.duration
+  local frac = (dur and dur > 0) and (state.elapsed / dur) or 0
+  local tline = Utils.formatTime(state.elapsed) .. (dur and (" / " .. Utils.formatTime(dur)) or "")
+  local tag = (state.playbackState == "paused") and " [PAUSE]" or ""
+  print("[" .. CLI.bar(frac, 22) .. "] " .. tline .. tag)
+  print("")
+
+  print(("Vol: [%s] %.1f   Clients: %d   Local: %s")
+    :format(CLI.bar(audio.volume / 3, 8, "#"), audio.volume, nClients or 0, localPlay and "on" or "off"))
+  local modes = {}
+  if playlist.loop ~= "off" then modes[#modes + 1] = "loop:" .. playlist.loop end
+  if playlist.shuffle then modes[#modes + 1] = "shuffle" end
+  print("Diffusion: " .. (encoding or "raw") .. (#modes > 0 and ("   [" .. table.concat(modes, " ") .. "]") or ""))
+  print("")
+
+  color(colors.cyan); print("Queue (" .. playlist:size() .. "):"); color(colors.white)
+  local up = playlist:upcoming(3)
+  if #up == 0 then color(colors.lightGray); print("  (vide)"); color(colors.white)
+  else for i, s in ipairs(up) do print(string.format("  %d. %s", i, Utils.trim(s.name) or "?")) end end
+
+  local _, h = term.getSize()
+  term.setCursorPos(1, h)
+  color(colors.gray)
+  term.write("[P]ause [S]kip [B]prev [+/-]vol [L]oop [Z]shuf [Q]ueue [A]dd [X]exit")
+  color(colors.white)
+end
+
 --- Affiche la queue sans attendre (pour la commande shell `queue --list`).
 function CLI.printQueue(playlist)
   if playlist.loop ~= "off" or playlist.shuffle then
