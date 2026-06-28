@@ -8,5 +8,6 @@
     "commands", "turtle", "pocket", "printError", "write", "read", "sleep"
   ],
   "diagnostics.disable": ["lowercase-global", "undefined-field", "deprecated"],
+  "workspace.ignoreDir": ["dist"],
   "workspace.library": []
 }

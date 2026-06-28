@@ -186,19 +186,19 @@ local function cmdVolume(cfg, parsed)
   print(string.format("Volume %s: %.1f", parsed.flags.global and "global" or "local", v))
 end
 
-local INSTALL_URL = "https://raw.githubusercontent.com/VIL-CIEL/CC_Radio_System_Music_Player/main/install.lua"
+local BUNDLE_URL = "https://raw.githubusercontent.com/VIL-CIEL/CC_Radio_System_Music_Player/main/dist/CC_Radio.lua"
 
--- Installe / met à jour via install.lua (téléchargé si absent).
+-- Met à jour le programme : retélécharge le fichier unique par-dessus lui-même.
 local function cmdInstall(_cfg, _parsed)
-  if not fs.exists("install.lua") then
-    if not http then printError("HTTP desactive cote serveur."); return end
-    print("Telechargement de l'installeur...")
-    local r = http.get(INSTALL_URL)
-    if not r then printError("Impossible de telecharger install.lua."); return end
-    local data = r.readAll(); r.close()
-    local f = fs.open("install.lua", "w"); f.write(data); f.close()
-  end
-  shell.run("install.lua")
+  if not http then printError("HTTP desactive cote serveur."); return end
+  print("Mise a jour de CC_Radio...")
+  local r = http.get(BUNDLE_URL)
+  if not r then printError("Echec du telechargement."); return end
+  local data = r.readAll(); r.close()
+  local prog = shell.getRunningProgram()
+  local f = fs.open(prog, "w"); f.write(data); f.close()
+  print("Mis a jour : " .. prog)
+  print("(Desinstallation : delete CC_Radio)")
 end
 
 -- Commandes de contrôle non actionnables en autonome (clavier en lecture, réseau en S3/S4).

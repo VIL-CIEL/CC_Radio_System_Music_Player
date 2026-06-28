@@ -112,6 +112,14 @@
 - Corrige : titres de recherche masqués (liste scrollable), tout accessible dans une seule interface.
 - Validation : 19/19 headless (accueil, onglets/scroll/clic/dispatch, intégration moteur+UI) + régression. LuaLS clean.
 
+### v1.2.0 — Distribution fichier unique
+- `build.lua` : concatène les modules (via `package.preload`) + le point d'entrée en un seul
+  `dist/CC_Radio.lua` exécutable. Source reste modulaire (relancer `build` après modif).
+- **Install** : un seul fichier téléchargé ; **désinstall** : `delete CC_Radio`.
+- `install.lua` et la commande `install` récupèrent le fichier unique ; `install` se met à jour
+  lui-même (écrit sur `shell.getRunningProgram()`).
+- Validation : bundle testé **standalone** (modules chargés sans aucun fichier annexe), suppression vérifiée. LuaLS clean.
+
 ## Reste à valider en jeu (non testable en headless)
 - Rendu audio audible (broadcaster local + clients).
 - Synchro réelle broadcaster ↔ client sur 2+ machines (rednet réel).

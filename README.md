@@ -67,15 +67,21 @@ envoie les chunks bruts ; chaque client les décode localement — efficace en b
 wget run https://raw.githubusercontent.com/VIL-CIEL/CC_Radio_System_Music_Player/main/install.lua
 ```
 
-L'installeur télécharge tous les fichiers du programme puis démarre l'interface.
-Pour **mettre à jour** plus tard :
+CC_Radio est distribué en **fichier unique** : l'installeur dépose un seul `CC_Radio.lua`
+puis démarre l'interface. Pour **mettre à jour** : `CC_Radio install`.
+
+> Installation manuelle : `wget https://raw.githubusercontent.com/VIL-CIEL/CC_Radio_System_Music_Player/main/dist/CC_Radio.lua CC_Radio.lua`
+
+### Désinstallation
+
+Comme tout tient dans un seul fichier :
 
 ```
-CC_Radio install
+delete CC_Radio
 ```
 
-> Installation manuelle : copiez `CC_Radio.lua` et les dossiers `core/`, `ui/`, `lib/` à la
-> racine de l'ordinateur.
+> Les données utilisateur (`config.json`, `queue.dat`, `CC_Radio.log`) sont des fichiers
+> séparés ; pour les retirer aussi : `delete config.json queue.dat CC_Radio.log`.
 
 ## Démarrage rapide
 
