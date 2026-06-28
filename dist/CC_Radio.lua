@@ -2173,13 +2173,14 @@ local function trunc(s, n) s = Utils.trim(s) or ""; if #s > n then return s:sub(
 
 -- ───────────────────────── Écran d'accueil ─────────────────────────
 
-function App.home()
+function App.home(version)
   local btns = {}
   local function draw()
     clear()
     local w = select(1, term.getSize())
-    term.setCursorPos(math.max(1, math.floor((w - 8) / 2)), 2)
-    setColor(colors.yellow); term.write("CC_RADIO"); setColor(colors.white)
+    local title = "CC_RADIO" .. (version and (" v" .. version) or "")
+    term.setCursorPos(math.max(1, math.floor((w - #title) / 2)), 2)
+    setColor(colors.yellow); term.write(title); setColor(colors.white)
     term.setCursorPos(2, 4); setColor(colors.lightGray); term.write("Choisissez un mode :"); setColor(colors.white)
     local items = {
       { id = "broadcaster", label = "[B] Broadcast (serveur radio)" },
@@ -2564,7 +2565,7 @@ for k, v in pairs(preload) do package.preload[k] = v end
   verification des prerequis. Les modes audio/reseau/GUI arrivent aux
   sprints suivants (voir docs/ROADMAP.md).
 ]]
-local VERSION = "0.1.0"
+local VERSION = "1.5.1"
 
 -- Resolution des modules relatifs au programme (pattern valide en CraftOS-PC).
 local selfDir = fs.getDir(shell.getRunningProgram())
@@ -2784,7 +2785,7 @@ local function main(...)
 
   if command == nil then
     -- Aucune commande : interface unifiée (accueil -> mode).
-    local mode = App.home()
+    local mode = App.home(VERSION)
     if mode == "broadcaster" then guard(cmdBroadcaster)
     elseif mode == "client" then if checkMode(cfg, "client") then guard(Client.run) end
     elseif mode == "local" then guard(cmdPlayLocal) end

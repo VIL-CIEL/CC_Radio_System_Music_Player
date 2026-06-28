@@ -8,7 +8,7 @@
   verification des prerequis. Les modes audio/reseau/GUI arrivent aux
   sprints suivants (voir docs/ROADMAP.md).
 ]]
-local VERSION = "0.1.0"
+local VERSION = "1.5.1"
 
 -- Resolution des modules relatifs au programme (pattern valide en CraftOS-PC).
 local selfDir = fs.getDir(shell.getRunningProgram())
@@ -228,7 +228,7 @@ local function main(...)
 
   if command == nil then
     -- Aucune commande : interface unifiée (accueil -> mode).
-    local mode = App.home()
+    local mode = App.home(VERSION)
     if mode == "broadcaster" then guard(cmdBroadcaster)
     elseif mode == "client" then if checkMode(cfg, "client") then guard(Client.run) end
     elseif mode == "local" then guard(cmdPlayLocal) end

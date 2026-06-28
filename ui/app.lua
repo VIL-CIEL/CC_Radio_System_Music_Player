@@ -43,13 +43,14 @@ local function trunc(s, n) s = Utils.trim(s) or ""; if #s > n then return s:sub(
 
 -- ───────────────────────── Écran d'accueil ─────────────────────────
 
-function App.home()
+function App.home(version)
   local btns = {}
   local function draw()
     clear()
     local w = select(1, term.getSize())
-    term.setCursorPos(math.max(1, math.floor((w - 8) / 2)), 2)
-    setColor(colors.yellow); term.write("CC_RADIO"); setColor(colors.white)
+    local title = "CC_RADIO" .. (version and (" v" .. version) or "")
+    term.setCursorPos(math.max(1, math.floor((w - #title) / 2)), 2)
+    setColor(colors.yellow); term.write(title); setColor(colors.white)
     term.setCursorPos(2, 4); setColor(colors.lightGray); term.write("Choisissez un mode :"); setColor(colors.white)
     local items = {
       { id = "broadcaster", label = "[B] Broadcast (serveur radio)" },
