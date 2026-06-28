@@ -209,6 +209,45 @@ function CLI.drawBroadcaster(state, playlist, audio, localPlay, nClients, encodi
   color(colors.white)
 end
 
+--- Écran du client (S4).
+-- @param view { broadcaster, label, title, author, duration, position, state, signal, volume, lost }
+function CLI.drawClient(view, audio)
+  term.setBackgroundColor(colors.black)
+  term.clear()
+  term.setCursorPos(1, 1)
+
+  color(colors.yellow); term.write("== CC_Radio [CLIENT] ")
+  local sig = view.signal
+  if sig == "connected" then color(colors.lime); term.write("* connecte")
+  elseif sig == "lost" then color(colors.red); term.write("! signal perdu")
+  else color(colors.gray); term.write("o recherche...") end
+  color(colors.white); print(""); print("")
+
+  local station = view.label or "?"
+  print("Station: " .. station .. (view.broadcaster and ("  (ID " .. view.broadcaster .. ")") or ""))
+  print("")
+  print(Utils.trim(view.title) or "---")
+  color(colors.lightGray); print(Utils.trim(view.author) or ""); color(colors.white)
+  print("")
+
+  local dur  = view.duration or 0
+  local frac = (dur > 0) and ((view.position or 0) / dur) or 0
+  local tline = Utils.formatTime(view.position or 0) .. (dur > 0 and (" / " .. Utils.formatTime(dur)) or "")
+  local tag = (view.state == "paused") and " [PAUSE]" or (view.state == "stopped" and " [STOP]" or "")
+  print("[" .. CLI.bar(frac, 22) .. "] " .. tline .. tag)
+  print("")
+
+  local vol = (audio and audio.volume) or view.volume or 0
+  print("Vol local: [" .. CLI.bar(vol / 3, 10, "#") .. "] " .. string.format("%.1f", vol)
+    .. (view.lost and view.lost > 0 and ("   Pertes: " .. view.lost) or ""))
+
+  local _, h = term.getSize()
+  term.setCursorPos(1, h)
+  color(colors.gray)
+  term.write("[+/-] vol local  [G] vol global  [S] status  [X] deconnexion")
+  color(colors.white)
+end
+
 --- Affiche la queue sans attendre (pour la commande shell `queue --list`).
 function CLI.printQueue(playlist)
   if playlist.loop ~= "off" or playlist.shuffle then

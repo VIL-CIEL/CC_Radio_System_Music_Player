@@ -13,7 +13,7 @@
 | S1 | `v0.2.0` | Audio local standalone (download → decode → play) | ✅ Fait |
 | S2 | `v0.3.0` | Playlist + contrôles CLI interactifs + persistance | ✅ Fait |
 | S3 | `v0.4.0` | Broadcaster réseau (audio/meta/cmd/disco) | ✅ Fait |
-| S4 | `v0.5.0` | Client réseau (réception, décodage, resync) | ⏳ |
+| S4 | `v0.5.0` | Client réseau (réception, décodage, resync) | ✅ Fait |
 | S5 | `v0.6.0` | GUI Monitor (widgets, layouts, touch, mode dual) | ⏳ |
 | S6 | `v1.0.0` | Polish, installeur, robustesse, README final | ⏳ |
 
@@ -64,11 +64,16 @@
   modem/speaker émulés, stream simulé, CMD injecté). LuaLS clean.
 - ⚠️ Sync réelle broadcaster↔client à valider en jeu (1 ordi émulé = 1 identité rednet) — fait en S4.
 
-### S4 — Client Réseau (`v0.5.0`)
-- `core/client.lua` : écoute, décodage local, playback, volume local indépendant.
-- `lib/discovery.lua` : auto-découverte.
-- Gestion paquets manquants (`seq`), perte de signal (timeout → redécouverte).
-- CMD client → broadcaster (local vs `--global`).
+### S4 — Client Réseau (`v0.5.0`) ✅
+- `core/client.lua` : `parallel.waitForAny(netLoop, playLoop, uiLoop)`, handler `Client.handle`
+  extrait (testable), décodage base64+DFPWM -> buffer PCM -> playback, volume local indépendant.
+- `lib/discovery.lua` : auto-découverte via DISCO announce (ou `--id`), envoi du join.
+- Gestion des trous de `seq` (compteur de pertes), reset au changement de chanson,
+  perte de signal (timeout 5 s -> redécouverte).
+- UI client : `+/-` volume local, `G` volume global (CMD), `S` status, `X` déconnexion.
+- Validation : 16/16 headless (handle unitaire + discovery + smoke complet annonce/join/chunks/playback).
+  LuaLS clean. Protocole compatible broadcaster par construction (mêmes shapes Network).
+- ⚠️ Sync réelle 2 machines : à valider en jeu.
 
 ### S5 — GUI Monitor (`v0.6.0`)
 - `ui/widgets.lua`, `ui/gui.lua` (layouts broadcaster/client).

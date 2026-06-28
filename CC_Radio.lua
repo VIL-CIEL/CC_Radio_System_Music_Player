@@ -22,6 +22,7 @@ local Downloader  = require("core.downloader")
 local Playlist    = require("core.playlist")
 local Player      = require("core.player")
 local Broadcaster = require("core.broadcaster")
+local Client      = require("core.client")
 local CLI         = require("ui.cli")
 local Help        = require("ui.help")
 
@@ -210,7 +211,7 @@ local function main(...)
   elseif command == "broadcaster" then
     cmdBroadcaster(cfg, parsed)
   elseif command == "client" then
-    if checkMode(cfg, "client") then notImplemented("4", "client") end
+    if checkMode(cfg, "client") then Client.run(cfg, parsed) end
   elseif command == "local" then
     cmdPlayLocal(cfg, parsed)
   elseif command == "play" then
