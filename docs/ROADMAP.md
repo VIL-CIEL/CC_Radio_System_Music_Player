@@ -11,7 +11,7 @@
 |---|---|---|---|
 | S0 | `v0.1.0` | Fondations : structure, entry point, prérequis, config/logger/utils, parsing CLI, aide | ✅ Fait |
 | S1 | `v0.2.0` | Audio local standalone (download → decode → play) | ✅ Fait |
-| S2 | `v0.3.0` | Playlist + contrôles CLI interactifs + persistance | ⏳ |
+| S2 | `v0.3.0` | Playlist + contrôles CLI interactifs + persistance | ✅ Fait |
 | S3 | `v0.4.0` | Broadcaster réseau (audio/meta/cmd/disco) | ⏳ |
 | S4 | `v0.5.0` | Client réseau (réception, décodage, resync) | ⏳ |
 | S5 | `v0.6.0` | GUI Monitor (widgets, layouts, touch, mode dual) | ⏳ |
@@ -40,11 +40,16 @@
   promo Patreon de l'API écartée automatiquement. Rendu audible : à confirmer in-game.
 - Notes : `id` API = identifiant vidéo YouTube ; `urlEncode` encode l'espace en `+` (OK pour l'API).
 
-### S2 — Playlist & Contrôles CLI (`v0.3.0`)
-- `core/playlist.lua` : queue, shuffle, loop (off/one/all), history.
-- `ui/cli.lua` interactif (touches P/S/B/+/-/L/Z/Q/A/X).
-- Commandes shell : queue/skip/pause/resume/prev/volume/loop/shuffle.
-- Persistance `queue.dat` (`textutils.serialize`).
+### S2 — Playlist & Contrôles CLI (`v0.3.0`) ✅
+- `core/playlist.lua` : queue, shuffle, loop (off/one/all), history, maxQueue ; persistance `queue.dat`.
+- `core/player.lua` : lecteur local interactif (`parallel.waitForAny(audioLoop, inputLoop)`),
+  pause/skip/prev réactifs via `audio:stop()`, ajout de chanson en cours de lecture.
+- `ui/cli.lua` : `drawPlayer` (modes/queue/progression) + `showQueue`/`printQueue`.
+- Commandes shell persistées : `queue --add/--list/--clear`, `loop`, `shuffle`, `volume` (--local/--global).
+  `play --local` et `local` lancent le lecteur ; `skip/pause/...` en autonome renvoient une aide
+  (actionnables au clavier en lecture, ou en réseau S3/S4).
+- Touches lecteur : P pause · S skip · B prev · +/- volume · L loop · Z shuffle · Q queue · A add · X exit.
+- Validation : 39/39 tests headless (logique + commandes persistées + smoke lecteur), LuaLS clean.
 
 ### S3 — Broadcaster Réseau (`v0.4.0`)
 - Lever le choix d'encodage (raw vs base64) via mesure en jeu.

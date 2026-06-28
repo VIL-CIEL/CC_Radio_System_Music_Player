@@ -19,11 +19,12 @@ local Config     = require("lib.config")
 local Logger     = require("lib.logger")
 local Prereq     = require("core.prereq")
 local Downloader = require("core.downloader")
-local Audio      = require("core.audio")
+local Playlist   = require("core.playlist")
+local Player     = require("core.player")
 local CLI        = require("ui.cli")
 local Help       = require("ui.help")
 
-local CONTROL_CMDS = { "queue", "status", "stop", "volume", "skip", "pause", "resume", "prev", "loop", "shuffle" }
+local CONTROL_CMDS = { "status", "stop", "skip", "pause", "resume", "prev" }
 
 local function printPrereq(r)
   for _, e in ipairs(r.errors) do printError("[X] " .. e) end
@@ -71,85 +72,37 @@ local function cmdMode(cfg, command)
     notImplemented("3", "broadcaster")
   elseif command == "client" then
     notImplemented("4", "client")
-  else -- local
-    notImplemented("1", "local")
   end
 end
 
--- Résout la chanson à jouer : URL/id YouTube direct, ou recherche + sélection.
-local function resolveSong(cfg, parsed)
-  if parsed.flags.youtube then
-    local id = Utils.extractYtId(parsed.flags.youtube)
-    if not id then
-      printError("URL/ID YouTube invalide: " .. tostring(parsed.flags.youtube))
-      return nil
-    end
-    return { id = id, name = "(YouTube " .. id .. ")", artist = "" }
-  end
-  local query = parsed.flags.query or parsed.positional[2]
-  if not query then
-    printError('Usage: CC_Radio play --query "..." --local   (ou --youtube <url>)')
-    return nil
-  end
-  print("Recherche: " .. query .. " ...")
-  local results, err = Downloader.search(cfg, query)
-  if not results then printError(err); return nil end
-  return CLI.pickResult(results)
-end
-
--- Lecture locale (standalone) : recherche -> stream -> playback + contrôle volume/stop.
-local function cmdPlayLocal(cfg, parsed)
-  local audio = Audio.new({
-    speakers = { peripheral.find("speaker") },
-    volume   = cfg.local_volume,
+-- Charge la playlist persistée avec les paramètres issus de la config.
+local function loadPlaylist(cfg)
+  return Playlist.load(Playlist.PATH, {
+    loop       = cfg.loop,
+    shuffle    = cfg.shuffle,
+    maxQueue   = cfg.max_queue_size,
+    maxHistory = cfg.history_size,
   })
-  if not audio:hasOutput() then
-    printError("Aucun speaker detecte : lecture locale impossible.")
+end
+
+-- Lecture locale interactive : charge la queue, ajoute la chanson demandée, lance le lecteur.
+local function cmdPlayLocal(cfg, parsed)
+  local pl = loadPlaylist(cfg)
+
+  local query   = parsed and (parsed.flags.query or parsed.positional[2]) or nil
+  local youtube = parsed and parsed.flags.youtube or nil
+  if query or youtube then
+    local song = Player.resolveSong(cfg, query, youtube)
+    if song then pl:add(song, true) end -- en tête : joué en premier
+  end
+
+  if pl:size() == 0 then
+    print("Queue vide. Ajoutez une chanson :")
+    print('  CC_Radio play --query "lofi" --local')
+    print('  CC_Radio queue --add "lofi"')
     return
   end
-
-  local song = resolveSong(cfg, parsed)
-  if not song then return end
-
-  local stream, err = Downloader.openStream(cfg, song.id)
-  if not stream then printError(err); return end
-
-  local state = {
-    song     = song,
-    elapsed  = 0,
-    duration = CLI.parseDuration(song.artist),
-    volume   = audio.volume,
-  }
-  CLI.drawNowPlaying(state)
-
-  parallel.waitForAny(
-    function() -- boucle audio
-      audio:streamPlay(stream, function(samples)
-        state.elapsed = Audio.samplesToSeconds(samples)
-        state.volume  = audio.volume
-        CLI.drawNowPlaying(state)
-      end)
-    end,
-    function() -- contrôles minimaux (S1) : volume + stop
-      while true do
-        local _, key = os.pullEvent("key")
-        if key == keys.q then
-          return
-        elseif key == keys.up then
-          audio:setVolume(audio.volume + 0.1)
-          state.volume = audio.volume; CLI.drawNowPlaying(state)
-        elseif key == keys.down then
-          audio:setVolume(audio.volume - 0.1)
-          state.volume = audio.volume; CLI.drawNowPlaying(state)
-        end
-      end
-    end
-  )
-
-  audio:stop()
-  stream:close()
-  print("")
-  print("Lecture terminee.")
+  Player.runLocal(cfg, pl)
 end
 
 local function cmdPlay(cfg, parsed)
@@ -158,6 +111,82 @@ local function cmdPlay(cfg, parsed)
   else
     notImplemented("3", "play (broadcaster) - utilisez --local pour la lecture solo")
   end
+end
+
+-- Résout une chanson pour `queue --add` (recherche interactive ou id/URL YouTube).
+local function resolveForQueue(cfg, parsed)
+  if parsed.flags.youtube then
+    local id = Utils.extractYtId(parsed.flags.youtube)
+    if not id then printError("URL/ID YouTube invalide."); return nil end
+    return { id = id, name = "(YouTube " .. id .. ")", artist = "" }
+  end
+  local query = (type(parsed.flags.add) == "string" and parsed.flags.add) or parsed.flags.query
+  if not query then
+    printError('Usage: CC_Radio queue --add "..."  (ou --add --youtube <url>)')
+    return nil
+  end
+  print("Recherche: " .. query .. " ...")
+  local results, err = Downloader.search(cfg, query)
+  if not results then printError(err); return nil end
+  return CLI.pickResult(results)
+end
+
+local function cmdQueue(cfg, parsed)
+  local pl = loadPlaylist(cfg)
+  if parsed.flags.clear then
+    pl:clear(); pl:save(); print("Queue videe.")
+  elseif parsed.flags.add then
+    local song = resolveForQueue(cfg, parsed)
+    if song then
+      local ok, e = pl:add(song)
+      if ok then pl:save(); print("Ajoute: " .. (Utils.trim(song.name) or song.id))
+      else printError(e) end
+    end
+  else
+    CLI.printQueue(pl)
+  end
+end
+
+local function cmdLoop(cfg, parsed)
+  local mode = parsed.positional[2]
+  if mode == "off" or mode == "one" or mode == "all" then
+    cfg.loop = mode; Config.save(cfg)
+    local pl = loadPlaylist(cfg); pl.loop = mode; pl:save()
+    print("Loop: " .. mode)
+  else
+    print("Loop actuel: " .. cfg.loop .. "   (usage: loop off|one|all)")
+  end
+end
+
+local function cmdShuffle(cfg, parsed)
+  local v = parsed.positional[2]
+  if v == "on" or v == "off" then
+    local b = (v == "on"); cfg.shuffle = b; Config.save(cfg)
+    local pl = loadPlaylist(cfg); pl.shuffle = b; pl:save()
+    print("Shuffle: " .. v)
+  else
+    print("Shuffle actuel: " .. tostring(cfg.shuffle) .. "   (usage: shuffle on|off)")
+  end
+end
+
+local function cmdVolume(cfg, parsed)
+  local v = tonumber(parsed.positional[2])
+  if not v then
+    print(("Volume local: %.1f | global: %.1f   (usage: volume 0.0-3.0 [--local|--global])")
+      :format(cfg.local_volume, cfg.default_volume))
+    return
+  end
+  v = math.max(0, math.min(3, v))
+  if parsed.flags.global then cfg.default_volume = v else cfg.local_volume = v end
+  Config.save(cfg)
+  print(string.format("Volume %s: %.1f", parsed.flags.global and "global" or "local", v))
+end
+
+-- Commandes de contrôle non actionnables en autonome (clavier en lecture, réseau en S3/S4).
+local function cmdRuntimeInfo(command)
+  printError("'" .. command .. "' n'agit pas en mode autonome.")
+  print(" - en lecture locale : touches du lecteur (P/S/B/...)")
+  print(" - a distance : commandes reseau (Sprint 3/4)")
 end
 
 local function main(...)
@@ -171,14 +200,24 @@ local function main(...)
     Help.show(parsed.positional[2])
   elseif command == "config" then
     cmdConfig(cfg, parsed)
-  elseif command == "broadcaster" or command == "client" or command == "local" then
+  elseif command == "broadcaster" or command == "client" then
     cmdMode(cfg, command)
+  elseif command == "local" then
+    cmdPlayLocal(cfg, parsed)
   elseif command == "play" then
     cmdPlay(cfg, parsed)
+  elseif command == "queue" then
+    cmdQueue(cfg, parsed)
+  elseif command == "loop" then
+    cmdLoop(cfg, parsed)
+  elseif command == "shuffle" then
+    cmdShuffle(cfg, parsed)
+  elseif command == "volume" then
+    cmdVolume(cfg, parsed)
   elseif command == "install" then
     notImplemented("6", "install")
   elseif Utils.contains(CONTROL_CMDS, command) then
-    notImplemented("2/3", command)
+    cmdRuntimeInfo(command)
   else
     printError("Commande inconnue: " .. tostring(command))
     Help.show()
