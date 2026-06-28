@@ -185,7 +185,9 @@ function Broadcaster.run(cfg, parsed)
             state.seq = state.seq + 1
 
             local encData, encoding = Network.encodeChunk(cfg, chunk)
-            net:broadcastAudio(state.seq, song.id, encData, encoding, nil)
+            -- instant de lecture commun à tous les clients (horloge serveur partagée)
+            local playAt = os.epoch("utc") + (cfg.sync_lead_ms or 2000)
+            net:broadcastAudio(state.seq, song.id, encData, encoding, nil, playAt)
 
             if localPlay then
               audio:playPCM(audio:decode(chunk)) -- backpressure -> cadence ~ temps réel

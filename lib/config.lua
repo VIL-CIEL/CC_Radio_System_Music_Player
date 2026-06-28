@@ -23,6 +23,7 @@ Config.DEFAULTS = {
   chunk_size_kb          = 16,                -- spike S0 : 16 KiB OK (round-trip intègre, ~3.2x sérialisé)
   audio_encoding         = "base64",          -- "base64" (~1.34x) | "raw" (~3.2x) — spike S3
   http_retries           = 2,                 -- nb de tentatives supplémentaires sur échec HTTP
+  sync_lead_ms           = 2000,              -- avance (ms) entre envoi et lecture client (synchro inter-clients)
   meta_interval_sec      = 5,
   discovery_interval_sec = 30,
   log_level              = "info",            -- "debug" | "info" | "warn" | "error"

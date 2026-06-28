@@ -50,5 +50,7 @@ end
 
 print(("Termine : %d fichiers, %d echec(s)."):format(okN, failN))
 if failN == 0 then
-  print('Lancez :  CC_Radio help')
+  print("Installation reussie ! Lancement de CC_Radio...")
+  sleep(1)
+  shell.run("CC_Radio")
 end

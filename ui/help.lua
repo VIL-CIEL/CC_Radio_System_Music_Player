@@ -106,13 +106,10 @@ EXEMPLES:
 ]],
 }
 
---- Affiche l'aide générale ou celle d'une commande.
+--- Affiche l'aide générale ou celle d'une commande (paginée : scrollable dans le shell).
 function Help.show(cmd)
-  if cmd and Help.COMMANDS[cmd] then
-    print(Help.COMMANDS[cmd])
-  else
-    print(Help.USAGE)
-  end
+  local text = (cmd and Help.COMMANDS[cmd]) or Help.USAGE
+  textutils.pagedPrint(text)
 end
 
 return Help

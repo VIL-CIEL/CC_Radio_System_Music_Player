@@ -64,10 +64,11 @@ end
 
 -- ── Émission ─────────────────────────────────────────────────────────────────
 
-function Network:broadcastAudio(seq, songId, encData, encoding, total)
+function Network:broadcastAudio(seq, songId, encData, encoding, total, playAt)
   rednet.broadcast({
     type = "audio_chunk", seq = seq, song_id = songId,
     data = encData, encoding = encoding, total = total,
+    play_at = playAt, -- epoch (ms) cible de lecture pour synchroniser les clients
   }, self.P.AUDIO)
 end
 

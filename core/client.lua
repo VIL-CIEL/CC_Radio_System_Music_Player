@@ -16,6 +16,19 @@ local GUI       = require("ui.gui")
 
 local Client = {}
 
+-- Délai de retard (ms) au-delà duquel un chunk est abandonné pour rester synchrone.
+local DROP_LATE_MS = 2000
+
+--- Décide quoi faire d'un chunk dont la lecture est prévue à `play_at` (epoch ms).
+-- @return "drop" si trop en retard, sinon un nombre de ms à attendre (>= 0).
+function Client.schedule(play_at, now)
+  if not play_at then return 0 end
+  local wait = play_at - now
+  if wait > 0 then return wait end
+  if wait < -DROP_LATE_MS then return "drop" end
+  return 0
+end
+
 --- Traite un message reçu (extrait pour être testable). Mute `ctx`.
 -- ctx = { net, audio, buffer, view, cfg, lastSeq, curSong, targetId }
 function Client.handle(ctx, sender, msg, proto)
@@ -32,7 +45,7 @@ function Client.handle(ctx, sender, msg, proto)
       end
       if msg.seq then ctx.lastSeq = msg.seq end
       local rawDfpwm = Network.decodeChunk(msg.encoding, msg.data)
-      ctx.buffer[#ctx.buffer + 1] = ctx.audio:decode(rawDfpwm)
+      ctx.buffer[#ctx.buffer + 1] = { pcm = ctx.audio:decode(rawDfpwm), play_at = msg.play_at }
       os.queueEvent("rsmp_chunk")
     elseif msg.type == "audio_stop" then
       view.state = "stopped"
@@ -123,7 +136,14 @@ function Client.run(cfg, parsed)
   local function playLoop()
     while not ctrl.exit do
       if #ctx.buffer > 0 then
-        audio:playPCM(table.remove(ctx.buffer, 1))
+        local item = table.remove(ctx.buffer, 1)
+        local sched = Client.schedule(item.play_at, os.epoch("utc"))
+        if sched == "drop" then
+          item = nil -- trop en retard : on saute pour rester synchrone
+        elseif type(sched) == "number" and sched > 0 then
+          os.sleep(sched / 1000) -- attendre l'instant de lecture commun
+        end
+        if not ctrl.exit and item then audio:playPCM(item.pcm) end
       else
         os.pullEvent("rsmp_chunk")
         if ctrl.exit then return end

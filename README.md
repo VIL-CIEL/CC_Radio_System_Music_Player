@@ -61,14 +61,14 @@ envoie les chunks bruts ; chaque client les décode localement — efficace en b
 
 ## Installation
 
-**One-liner** (sur l'ordinateur, dans le shell) :
+**One-liner** (sur l'ordinateur, dans le shell) — installe et lance directement :
 
 ```
-wget https://raw.githubusercontent.com/VIL-CIEL/CC_Radio_System_Music_Player/main/install.lua install.lua
-install
+wget run https://raw.githubusercontent.com/VIL-CIEL/CC_Radio_System_Music_Player/main/install.lua
 ```
 
-L'installeur télécharge tous les fichiers du programme. Pour **mettre à jour** plus tard :
+L'installeur télécharge tous les fichiers du programme puis démarre l'interface.
+Pour **mettre à jour** plus tard :
 
 ```
 CC_Radio install
@@ -145,6 +145,7 @@ Fichier `config.json` (généré à la première sauvegarde). Clés principales 
 | `audio_encoding` | `"base64"` | `base64` (~1.34×) ou `raw` (~3.2×) sur le réseau |
 | `chunk_size_kb` | `16` | Taille des chunks DFPWM |
 | `http_retries` | `2` | Tentatives HTTP supplémentaires |
+| `sync_lead_ms` | `2000` | Avance lecture client (synchro inter-clients) |
 | `meta_interval_sec` / `discovery_interval_sec` | `5` / `30` | Cadence META / annonce |
 | `max_queue_size` / `history_size` | `50` / `10` | Limites file / historique |
 
