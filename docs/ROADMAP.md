@@ -10,7 +10,7 @@
 | Sprint | Version | Fonctionnalité | Statut |
 |---|---|---|---|
 | S0 | `v0.1.0` | Fondations : structure, entry point, prérequis, config/logger/utils, parsing CLI, aide | ✅ Fait |
-| S1 | `v0.2.0` | Audio local standalone (download → decode → play) | ⏳ À venir |
+| S1 | `v0.2.0` | Audio local standalone (download → decode → play) | ✅ Fait |
 | S2 | `v0.3.0` | Playlist + contrôles CLI interactifs + persistance | ⏳ |
 | S3 | `v0.4.0` | Broadcaster réseau (audio/meta/cmd/disco) | ⏳ |
 | S4 | `v0.5.0` | Client réseau (réception, décodage, resync) | ⏳ |
@@ -29,13 +29,16 @@
   intègre, inflation ~3,2× (16 KiB → ~52 Ko sérialisé). 16 KiB validé ; optimisation
   base64 (~1,33×) à évaluer en S3.
 
-### S1 — Audio Local Standalone (`v0.2.0`)
+### S1 — Audio Local Standalone (`v0.2.0`) ✅
 - `core/downloader.lua` : recherche `?v=2.1&search=` (JSON), download `?v=2.1&id=` (`binary=true`),
   streaming header 4 octets + chunks `16*1024-4` puis `16*1024`.
 - `core/audio.lua` : `dfpwm.make_decoder`, `speaker.playAudio` + backpressure `speaker_audio_empty`,
-  volume 0.0–3.0, multi-speakers.
-- `ui/cli.lua` : affichage titre/artiste/progression/volume.
-- Cible : `CC_Radio play --query "lofi" --local` joue un morceau complet.
+  volume 0.0–3.0, multi-speakers (`parallel.waitForAll`).
+- `ui/cli.lua` : sélecteur de résultats + écran "lecture en cours" (titre/artiste/progression/volume).
+- `CC_Radio play --query "lofi" --local` et `--youtube <url>` fonctionnels.
+- **Validé sur l'API en direct** (CraftOS-PC) : recherche, download, décodage 131072 samples/chunk,
+  promo Patreon de l'API écartée automatiquement. Rendu audible : à confirmer in-game.
+- Notes : `id` API = identifiant vidéo YouTube ; `urlEncode` encode l'espace en `+` (OK pour l'API).
 
 ### S2 — Playlist & Contrôles CLI (`v0.3.0`)
 - `core/playlist.lua` : queue, shuffle, loop (off/one/all), history.

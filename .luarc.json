@@ -7,6 +7,6 @@
     "settings", "keys", "http", "window", "shell", "multishell", "disk",
     "commands", "turtle", "pocket", "printError", "write", "read", "sleep"
   ],
-  "diagnostics.disable": ["lowercase-global"],
+  "diagnostics.disable": ["lowercase-global", "undefined-field", "deprecated"],
   "workspace.library": []
 }

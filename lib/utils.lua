@@ -59,6 +59,22 @@ function Utils.coerce(v)
   return v
 end
 
+--- Supprime les espaces en début/fin de chaîne.
+function Utils.trim(s)
+  if type(s) ~= "string" then return s end
+  return (s:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+--- Extrait l'identifiant vidéo YouTube d'une URL (ou renvoie l'id si déjà brut).
+-- @return string|nil
+function Utils.extractYtId(url)
+  if type(url) ~= "string" then return nil end
+  return url:match("youtu%.be/([%w_%-]+)")
+      or url:match("[?&]v=([%w_%-]+)")
+      or (url:match("^[%w_%-]+$") and url)
+      or nil
+end
+
 --- Copie superficielle d'une table.
 function Utils.shallowCopy(t)
   local r = {}
