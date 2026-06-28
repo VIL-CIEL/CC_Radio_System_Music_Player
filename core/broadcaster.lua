@@ -151,7 +151,7 @@ function Broadcaster.run(cfg, parsed)
 
   local function buildMeta()
     local up = {}
-    for i, s in ipairs(playlist:upcoming(3)) do up[i] = { id = s.id, title = s.name } end
+    for i, s in ipairs(playlist.queue) do up[i] = { id = s.id, title = s.name } end -- file complète (synchro client)
     return {
       type = "meta", broadcaster_id = state.id, label = state.label,
       song_id  = state.song and state.song.id,

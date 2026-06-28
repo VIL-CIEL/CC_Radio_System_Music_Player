@@ -51,7 +51,8 @@ function GUI.drawCompanion(mon, snap, kind, buttons)
   local w = select(1, mon.getSize())
   mon.setBackgroundColor(colors.black); mon.clear()
 
-  txt(mon, 2, 1, "CC_RADIO", colors.yellow)
+  local title = "CC_RADIO" .. ((snap.label and snap.label ~= "") and (" " .. snap.label) or "")
+  txt(mon, 2, 1, title:sub(1, w - 8), colors.yellow)
   if kind == "client" then
     local sig = snap.signal or "?"
     local c = (sig == "connected") and colors.lime or (sig == "lost") and colors.red or colors.gray

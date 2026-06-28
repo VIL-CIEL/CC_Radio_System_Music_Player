@@ -90,20 +90,29 @@ end
 
 -- ───────────────────────── Rendu des onglets ─────────────────────────
 
--- Calcule les zones cliquables des onglets. @return liste {name,x,w}, index 1..3
-local function tabRegions()
+-- Onglets selon le mode : le client n'a PAS de recherche.
+local function tabsFor(ctx)
+  if ctx.mode == "client" then
+    return { { id = "np", name = "Now Playing" }, { id = "queue", name = "Queue" } }
+  end
+  return { { id = "np", name = "Now Playing" }, { id = "search", name = "Search" },
+    { id = "queue", name = "Queue" } }
+end
+
+-- Zones cliquables des onglets pour le mode courant.
+local function tabRegions(ctx)
   local regions, x = {}, 1
-  for i, name in ipairs(TABS) do
-    local label = " " .. name .. " "
+  for i, t in ipairs(tabsFor(ctx)) do
+    local label = " " .. t.name .. " "
     regions[i] = { i = i, x = x, w = #label, label = label }
     x = x + #label + 1
   end
   return regions
 end
 
-local function drawTabs(ui)
+local function drawTabs(ctx, ui)
   term.setCursorPos(1, 1); term.setBackgroundColor(colors.gray); term.clearLine()
-  for _, r in ipairs(tabRegions()) do
+  for _, r in ipairs(tabRegions(ctx)) do
     term.setCursorPos(r.x, 1)
     if r.i == ui.tab then
       term.setBackgroundColor(colors.white); setColor(colors.black)
@@ -111,6 +120,17 @@ local function drawTabs(ui)
       term.setBackgroundColor(colors.gray); setColor(colors.white)
     end
     term.write(r.label)
+  end
+  -- Nom de la station / station connectée, aligné à droite, à côté de "CC_Radio".
+  local label = ctx.np().label
+  if label and label ~= "" then
+    local w = term.getSize()
+    local txt = "CC_Radio: " .. label
+    if #txt > w - 2 then txt = label end
+    local x = math.max(1, w - #txt)
+    term.setCursorPos(x, 1)
+    term.setBackgroundColor(colors.gray); setColor(colors.yellow)
+    term.write(txt:sub(1, w))
   end
   term.setBackgroundColor(colors.black); setColor(colors.white)
 end
@@ -133,8 +153,7 @@ local function drawNowPlaying(ctx, ui)
   if ctx.mode == "broadcaster" then
     term.write("   Clients: " .. (s.clients or 0))
   elseif ctx.mode == "client" then
-    term.setCursorPos(2, 9); setColor(colors.lightGray)
-    term.write("Station: " .. (s.label or "?") .. "  [" .. (s.signal or "?") .. "]"); setColor(colors.white)
+    term.write("   [" .. (s.signal or "?") .. "]")
   end
 
   -- Boutons de contrôle (bas)
@@ -224,13 +243,18 @@ end
 
 local function render(ctx, ui)
   clear()
-  drawTabs(ui)
-  if ui.tab == 1 then drawNowPlaying(ctx, ui)
-  elseif ui.tab == 2 then drawSearch(ctx, ui)
+  local tabs = tabsFor(ctx)
+  if ui.tab > #tabs then ui.tab = 1 end
+  drawTabs(ctx, ui)
+  local id = tabs[ui.tab].id
+  if id == "np" then drawNowPlaying(ctx, ui)
+  elseif id == "search" then drawSearch(ctx, ui)
   else drawQueue(ctx, ui) end
   local _, h = term.getSize()
   term.setCursorPos(1, h); setColor(colors.gray)
-  term.write(" [1/2/3] onglets  [/] recherche  [X] quitter"); setColor(colors.white)
+  local hint = (ctx.mode == "client") and " [onglets: chiffres]  [X] quitter"
+    or " [chiffres] onglets  [/] recherche  [X] quitter"
+  term.write(hint); setColor(colors.white)
 end
 
 -- ───────────────────────── Interactions ─────────────────────────
@@ -249,15 +273,25 @@ local function runSearch(ctx, ui)
   ui.results = results or {}
 end
 
+-- Cherche l'index d'un onglet par id. @return number|nil
+local function tabIndex(ctx, id)
+  for i, t in ipairs(tabsFor(ctx)) do if t.id == id then return i end end
+  return nil
+end
+
 -- @return exit:boolean
 local function onChar(ctx, ui, c)
   c = c:lower()
-  if c == "1" then ui.tab, ui.scroll = 1, 0
-  elseif c == "2" then ui.tab, ui.scroll = 2, 0
-  elseif c == "3" then ui.tab, ui.scroll = 3, 0
-  elseif c == "/" then ui.tab = 2; runSearch(ctx, ui)
-  elseif c == "x" then return ctx.dispatch("exit")
-  elseif ui.tab == 1 then
+  local tabs = tabsFor(ctx)
+  local digit = tonumber(c)
+  if digit and tabs[digit] then
+    ui.tab, ui.scroll, ui.selected = digit, 0, nil
+  elseif c == "/" then
+    local si = tabIndex(ctx, "search")
+    if si then ui.tab = si; runSearch(ctx, ui) end
+  elseif c == "x" then
+    return ctx.dispatch("exit")
+  elseif tabs[ui.tab].id == "np" then
     local map = { p = "playpause", s = "skip", b = "prev", ["+"] = "volup",
       ["="] = "volup", ["-"] = "voldown", l = "loop", z = "shuffle" }
     if map[c] then return ctx.dispatch(map[c]) end
@@ -265,22 +299,24 @@ local function onChar(ctx, ui, c)
   return false
 end
 
-local function onScroll(ui, dir)
-  if ui.tab == 2 or ui.tab == 3 then ui.scroll = math.max(0, ui.scroll + dir) end
+local function onScroll(ctx, ui, dir)
+  local id = tabsFor(ctx)[ui.tab].id
+  if id == "search" or id == "queue" then ui.scroll = math.max(0, ui.scroll + dir) end
 end
 
 -- @return exit:boolean
 local function onClick(ctx, ui, x, y)
   if y == 1 then -- barre d'onglets
-    for _, r in ipairs(tabRegions()) do
+    for _, r in ipairs(tabRegions(ctx)) do
       if x >= r.x and x < r.x + r.w then ui.tab, ui.scroll, ui.selected = r.i, 0, nil; return false end
     end
     return false
   end
-  if ui.tab == 1 and ui.npButtons then
+  local id = tabsFor(ctx)[ui.tab].id
+  if id == "np" and ui.npButtons then
     local b = Widgets.hitTest(ui.npButtons, x, y)
     if b then return ctx.dispatch(b.id) end
-  elseif ui.tab == 2 then
+  elseif id == "search" then
     if ui.searchBtn and x >= ui.searchBtn.x and x < ui.searchBtn.x + ui.searchBtn.w and y == ui.searchBtn.y then
       runSearch(ctx, ui); return false
     end
@@ -293,7 +329,7 @@ local function onClick(ctx, ui, x, y)
       end
     end
     if ui.rowMap and ui.rowMap[y] then ui.selected = ui.rowMap[y] end
-  elseif ui.tab == 3 then
+  elseif id == "queue" then
     if ui.rowMap and ui.rowMap[y] then ctx.dispatch("remove", { index = ui.rowMap[y] }) end
   end
   return false
@@ -316,7 +352,7 @@ function App.run(ctx)
       if onClick(ctx, ui, ev[3], ev[4]) then return end
       render(ctx, ui)
     elseif e == "mouse_scroll" then
-      onScroll(ui, ev[2]); render(ctx, ui)
+      onScroll(ctx, ui, ev[2]); render(ctx, ui)
     elseif e == "term_resize" then
       render(ctx, ui)
     end
@@ -343,6 +379,6 @@ function App.monitor(ctx, mon)
 end
 
 App._internal = { tabRegions = tabRegions, onClick = onClick, onScroll = onScroll,
-  onChar = onChar, render = render }
+  onChar = onChar, render = render, tabsFor = tabsFor }
 
 return App

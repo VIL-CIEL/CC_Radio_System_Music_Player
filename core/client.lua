@@ -51,6 +51,7 @@ function Client.handle(ctx, sender, msg, proto)
       view.state = "stopped"
     end
   elseif proto == net.P.META and msg.type == "meta" then
+    view.signal     = "connected" -- la META prouve que la station répond (même en pause)
     view.title      = msg.title or view.title
     view.author     = msg.author or view.author
     view.duration   = msg.duration or 0
@@ -118,17 +119,22 @@ function Client.run(cfg, parsed)
 
   local function netLoop()
     while not ctrl.exit do
-      local sender, msg, mproto = net:receiveAny(5)
-      if not sender then
-        view.signal = "lost"
-        local b = Discovery.findBroadcaster(net, 5)
-        if b then
-          ctx.targetId = b.id; view.broadcaster = b.id; view.label = b.label
-          Discovery.join(net, ctx.targetId, cfg.station_label or "client")
-          view.signal = "connected"
-        end
-      elseif type(msg) == "table" then
+      -- Timeout > intervalle META (5 s) pour ne pas passer "perdu" pendant une pause.
+      local sender, msg, mproto = net:receiveAny(8)
+      if sender and type(msg) == "table" then
         Client.handle(ctx, sender, msg, mproto)
+      elseif not sender then
+        -- Aucun message depuis 8 s : signal perdu. On NE bloque PAS en redécouverte
+        -- (ça jetait les chunks audio au retour). META/annonce nous reconnecteront.
+        view.signal = "lost"
+        if not ctx.targetId then
+          local b = Discovery.findBroadcaster(net, 3)
+          if b then
+            ctx.targetId = b.id; view.broadcaster = b.id; view.label = b.label
+            Discovery.join(net, ctx.targetId, cfg.station_label or "client")
+            view.signal = "connected"
+          end
+        end
       end
     end
   end

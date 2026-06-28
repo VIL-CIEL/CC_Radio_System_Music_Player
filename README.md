@@ -80,8 +80,9 @@ Comme tout tient dans un seul fichier :
 delete CC_Radio.lua
 ```
 
-> Les données utilisateur (`config.json`, `queue.dat`, `CC_Radio.log`) sont des fichiers
-> séparés ; pour les retirer aussi : `delete config.json queue.dat CC_Radio.log`.
+> Les données utilisateur (`config.json`, `queue.dat`) sont des fichiers séparés
+> (`CC_Radio.log` n'est créé qu'en cas d'erreur). Pour tout retirer :
+> `delete config.json queue.dat CC_Radio.log`.
 
 ## Démarrage rapide
 

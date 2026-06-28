@@ -4,8 +4,10 @@
 local Discovery = {}
 
 --- Attend une annonce DISCO et renvoie les infos du broadcaster.
+-- Envoie d'abord une requête "who" : les stations répondent aussitôt (même sans musique).
 -- @return table|nil { id, label, song_title }
 function Discovery.findBroadcaster(net, timeout)
+  net:announce({ type = "who" })
   local sender, msg, mproto = net:receiveAny(timeout or 10)
   while sender do
     if mproto == net.P.DISCO and type(msg) == "table" and msg.type == "announce" then

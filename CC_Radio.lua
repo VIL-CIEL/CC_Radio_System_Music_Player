@@ -213,8 +213,8 @@ local function main(...)
   local parsed = Utils.parseArgs(argv)
   local command = parsed.positional[1]
   local cfg = Config.load()
+  -- Le log n'est écrit (CC_Radio.log) qu'en cas d'erreur réelle (pas à chaque lancement).
   local log = Logger.new({ level = cfg.log_level, toTerm = false })
-  log:info("commande: " .. tostring(command or "(app)"))
 
   -- Exécute fn en capturant les erreurs (sauf interruption Ctrl+T) -> log + message clair.
   local function guard(fn)
