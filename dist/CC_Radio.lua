@@ -1012,6 +1012,60 @@ function Broadcaster.resolveSong(cfg, query, youtube)
   return results[1]
 end
 
+-- Scanne le réseau pour collecter les noms de stations déjà actives.
+-- Envoie une requête "who" ; les broadcasters répondent par une annonce immédiate.
+-- @return table { [label_minuscule] = true }
+function Broadcaster.scanNames(net, seconds)
+  net:announce({ type = "who" })
+  local taken = {}
+  local deadline = os.epoch("utc") + (seconds or 1.5) * 1000
+  while true do
+    local left = (deadline - os.epoch("utc")) / 1000
+    if left <= 0 then break end
+    local sender, msg, proto = net:receiveAny(left)
+    if not sender then break end
+    if proto == net.P.DISCO and type(msg) == "table" and msg.type == "announce"
+        and type(msg.label) == "string" then
+      taken[msg.label:lower()] = true
+    end
+  end
+  return taken
+end
+
+-- Valide un nom de station (logique pure, testable).
+-- @return ok:boolean, reason:nil|"empty"|"taken", cleaned:string
+function Broadcaster.validateName(name, taken)
+  local clean = Utils.trim(type(name) == "string" and name or "") or ""
+  if clean == "" then return false, "empty", clean end
+  if taken and taken[clean:lower()] then return false, "taken", clean end
+  return true, nil, clean
+end
+
+-- Demande un nom de station : non vide et non déjà utilisé sur le réseau.
+local function resolveStationName(net, candidate)
+  local taken = Broadcaster.scanNames(net, 1.5)
+  local name = (type(candidate) == "string") and candidate or nil
+  while true do
+    if not name or Utils.trim(name) == "" then
+      term.setBackgroundColor(colors.black); term.setTextColor(colors.white)
+      term.clear(); term.setCursorPos(1, 1)
+      print("== CC_Radio - Nouvelle station ==")
+      print("")
+      write("Nom de la station : ")
+      name = read()
+    end
+    local ok, reason, clean = Broadcaster.validateName(name, taken)
+    if ok then
+      return clean
+    elseif reason == "empty" then
+      printError("Le nom ne peut pas etre vide.")
+    else
+      printError("Nom deja utilise par une autre station. Choisissez-en un autre.")
+    end
+    name = nil
+  end
+end
+
 function Broadcaster.run(cfg, parsed)
   local net = Network.new(cfg)
   local ok, err = net:open()
@@ -1038,8 +1092,12 @@ function Broadcaster.run(cfg, parsed)
     maxQueue = cfg.max_queue_size, maxHistory = cfg.history_size,
   })
 
+  -- Nom de station obligatoire (non vide) et unique sur le réseau.
+  print("Recherche des stations existantes...")
+  local stationName = resolveStationName(net, parsed and parsed.flags.label)
+
   local state = {
-    label = (parsed and parsed.flags.label) or cfg.station_label,
+    label = stationName,
     id = os.getComputerID(),
     clients = {},          -- [id] = { label, last_seen }
     song = nil, duration = nil, elapsed = 0, seq = 0,
@@ -1185,6 +1243,12 @@ function Broadcaster.run(cfg, parsed)
           applyCommand(msg.command, msg.args, msg.client_id or sender)
         elseif mproto == net.P.DISCO and msg.type == "join" then
           state.clients[sender] = { label = msg.label, last_seen = nowSec() }
+        elseif mproto == net.P.DISCO and msg.type == "who" then
+          -- une nouvelle station vérifie l'unicité des noms : on répond aussitôt.
+          net:announce({
+            type = "announce", broadcaster_id = state.id, label = state.label,
+            state = state.playbackState, song_title = state.song and state.song.name,
+          })
         end
       end
     end
