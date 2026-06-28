@@ -14,7 +14,7 @@
 | S2 | `v0.3.0` | Playlist + contrôles CLI interactifs + persistance | ✅ Fait |
 | S3 | `v0.4.0` | Broadcaster réseau (audio/meta/cmd/disco) | ✅ Fait |
 | S4 | `v0.5.0` | Client réseau (réception, décodage, resync) | ✅ Fait |
-| S5 | `v0.6.0` | GUI Monitor (widgets, layouts, touch, mode dual) | ⏳ |
+| S5 | `v0.6.0` | GUI Monitor (widgets, layouts, touch, mode dual) | ✅ Fait |
 | S6 | `v1.0.0` | Polish, installeur, robustesse, README final | ⏳ |
 
 ## Détail des sprints
@@ -75,9 +75,15 @@
   LuaLS clean. Protocole compatible broadcaster par construction (mêmes shapes Network).
 - ⚠️ Sync réelle 2 machines : à valider en jeu.
 
-### S5 — GUI Monitor (`v0.6.0`)
-- `ui/widgets.lua`, `ui/gui.lua` (layouts broadcaster/client).
-- Auto-détection monitor + taille (≥51×19), `--gui`, `monitor_touch`, mode dual.
+### S5 — GUI Monitor (`v0.6.0`) ✅
+- `ui/widgets.lua` : hit-testing (pur/testable), `drawButton`, `hbar`, `buttonRow` responsive.
+- `ui/gui.lua` : détection monitor + taille (min 26×12, scale 0.5), layouts broadcaster/client,
+  `handleTouch` (coord → id d'action), rendu.
+- Intégration broadcaster + client : `doAction` unique partagé clavier/tactile, gestion `monitor_touch`,
+  **mode dual** (CLI terminal + GUI monitor simultanés), `--gui` force (erreur si pas de monitor).
+- Boutons broadcaster : prev/playpause/skip/shuffle/loop ; client : vol-/vol+/status/disconnect.
+- Validation : 17/17 headless (widgets + GUI sur monitor simulé + intégration `monitor_touch`). LuaLS clean.
+- ⚠️ Rendu visuel & tactile réels : à valider en jeu.
 
 ### S6 — Polish & Distribution (`v1.0.0`)
 - `install.lua` (wget/pastebin), `--update`.

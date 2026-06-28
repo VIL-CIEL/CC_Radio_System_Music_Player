@@ -12,6 +12,7 @@ local Audio     = require("core.audio")
 local Network   = require("core.network")
 local Discovery = require("lib.discovery")
 local CLI       = require("ui.cli")
+local GUI       = require("ui.gui")
 
 local Client = {}
 
@@ -60,6 +61,19 @@ function Client.run(cfg, parsed)
   end
   if parsed and parsed.flags.volume then
     audio:setVolume(tonumber(parsed.flags.volume) or cfg.local_volume)
+  end
+
+  -- GUI monitor (auto si présent ; --gui force).
+  local guiMon, guiButtons
+  do
+    local mon, w, h = GUI.detect(cfg)
+    if mon then
+      guiMon = mon
+      guiButtons = GUI.buttons("client", w, h)
+    elseif parsed and parsed.flags.gui then
+      printError("Option --gui: " .. tostring(w))
+      net:close(); return
+    end
   end
 
   local ctx = {
@@ -117,30 +131,48 @@ function Client.run(cfg, parsed)
     end
   end
 
-  local function uiLoop()
+  local function draw()
+    view.volume = audio.volume
     CLI.drawClient(view, audio)
+    if guiMon then GUI.drawClient(guiMon, view, audio, guiButtons) end
+  end
+
+  -- Action unique partagée clavier et tactile. @return boolean exit
+  local function doAction(a)
+    if a == "exit" or a == "disconnect" then
+      ctrl.exit = true; audio:stop(); os.queueEvent("rsmp_chunk"); return true
+    elseif a == "volup" then audio:setVolume(audio.volume + 0.1)
+    elseif a == "voldown" then audio:setVolume(audio.volume - 0.1)
+    elseif a == "global" and ctx.targetId then
+      net:sendCmd(ctx.targetId, { type = "cmd", command = "volume",
+        args = { level = audio.volume }, client_id = os.getComputerID() })
+    elseif a == "status" and ctx.targetId then
+      net:sendCmd(ctx.targetId, { type = "cmd", command = "status",
+        args = {}, client_id = os.getComputerID() })
+    end
+    return false
+  end
+
+  local KEYMAP = {
+    x = "exit", ["+"] = "volup", ["="] = "volup", ["-"] = "voldown",
+    g = "global", s = "status",
+  }
+
+  local function uiLoop()
+    draw()
     local timer = os.startTimer(0.5)
     while true do
       local ev = { os.pullEvent() }
       if ev[1] == "char" then
-        local ch = ev[2]:lower()
-        if ch == "x" then
-          ctrl.exit = true; audio:stop(); os.queueEvent("rsmp_chunk"); return
-        elseif ch == "+" or ch == "=" then
-          view.volume = audio:setVolume(audio.volume + 0.1)
-        elseif ch == "-" then
-          view.volume = audio:setVolume(audio.volume - 0.1)
-        elseif ch == "g" and ctx.targetId then
-          net:sendCmd(ctx.targetId, { type = "cmd", command = "volume",
-            args = { level = audio.volume }, client_id = os.getComputerID() })
-        elseif ch == "s" and ctx.targetId then
-          net:sendCmd(ctx.targetId, { type = "cmd", command = "status",
-            args = {}, client_id = os.getComputerID() })
-        end
-        CLI.drawClient(view, audio)
+        local action = KEYMAP[ev[2]:lower()]
+        if action and doAction(action) then return end
+        draw()
+      elseif ev[1] == "monitor_touch" and guiButtons then
+        local id = GUI.handleTouch(guiButtons, ev[3], ev[4])
+        if id and doAction(id) then return end
+        draw()
       elseif ev[1] == "timer" and ev[2] == timer then
-        view.volume = audio.volume
-        CLI.drawClient(view, audio)
+        draw()
         timer = os.startTimer(0.5)
       end
     end

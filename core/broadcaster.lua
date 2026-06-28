@@ -12,6 +12,7 @@ local Audio      = require("core.audio")
 local Playlist   = require("core.playlist")
 local Network    = require("core.network")
 local CLI        = require("ui.cli")
+local GUI        = require("ui.gui")
 local Utils      = require("lib.utils")
 
 local Broadcaster = {}
@@ -47,6 +48,19 @@ function Broadcaster.run(cfg, parsed)
   local audio = Audio.new({ speakers = { peripheral.find("speaker") }, volume = cfg.default_volume })
   local localPlay = audio:hasOutput() and not (parsed and parsed.flags["no-speaker"])
   math.randomseed(os.epoch("utc"))
+
+  -- GUI monitor (auto si présent ; --gui force, erreur si absent).
+  local guiMon, guiButtons
+  do
+    local mon, w, h = GUI.detect(cfg)
+    if mon then
+      guiMon = mon
+      guiButtons = GUI.buttons("broadcaster", w, h)
+    elseif parsed and parsed.flags.gui then
+      printError("Option --gui: " .. tostring(w))
+      net:close(); return
+    end
+  end
 
   local playlist = Playlist.load(Playlist.PATH, {
     loop = cfg.loop, shuffle = cfg.shuffle,
@@ -226,7 +240,35 @@ function Broadcaster.run(cfg, parsed)
 
   local function draw()
     CLI.drawBroadcaster(state, playlist, audio, localPlay, clientCount(), cfg.audio_encoding)
+    if guiMon then GUI.drawBroadcaster(guiMon, state, playlist, audio, clientCount(), guiButtons) end
   end
+
+  -- Action unique partagée clavier (uiLoop) et tactile (monitor_touch).
+  -- @return boolean exit
+  local function doAction(a)
+    if a == "exit" then
+      ctrl.exit = true; audio:stop(); os.queueEvent("rsmp_resume"); return true
+    elseif a == "playpause" then applyCommand(ctrl.paused and "resume" or "pause")
+    elseif a == "skip" then applyCommand("skip")
+    elseif a == "prev" then applyCommand("prev")
+    elseif a == "volup" then audio:setVolume(audio.volume + 0.1)
+    elseif a == "voldown" then audio:setVolume(audio.volume - 0.1)
+    elseif a == "loop" then playlist:cycleLoop(); playlist:save()
+    elseif a == "shuffle" then playlist:toggleShuffle(); playlist:save()
+    elseif a == "queue" then CLI.showQueue(playlist)
+    elseif a == "add" then
+      write("Ajouter (recherche): ")
+      local song = Broadcaster.resolveSong(cfg, read())
+      if song then playlist:add(song); playlist:save(); os.queueEvent("queue_updated") end
+    end
+    return false
+  end
+
+  local KEYMAP = {
+    x = "exit", p = "playpause", s = "skip", b = "prev",
+    ["+"] = "volup", ["="] = "volup", ["-"] = "voldown",
+    l = "loop", z = "shuffle", q = "queue", a = "add",
+  }
 
   local function uiLoop()
     draw()
@@ -234,22 +276,12 @@ function Broadcaster.run(cfg, parsed)
     while true do
       local ev = { os.pullEvent() }
       if ev[1] == "char" then
-        local ch = ev[2]:lower()
-        if ch == "x" then
-          ctrl.exit = true; audio:stop(); os.queueEvent("rsmp_resume"); return
-        elseif ch == "p" then applyCommand(ctrl.paused and "resume" or "pause")
-        elseif ch == "s" then applyCommand("skip")
-        elseif ch == "b" then applyCommand("prev")
-        elseif ch == "+" or ch == "=" then audio:setVolume(audio.volume + 0.1)
-        elseif ch == "-" then audio:setVolume(audio.volume - 0.1)
-        elseif ch == "l" then playlist:cycleLoop(); playlist:save()
-        elseif ch == "z" then playlist:toggleShuffle(); playlist:save()
-        elseif ch == "q" then CLI.showQueue(playlist)
-        elseif ch == "a" then
-          write("Ajouter (recherche): ")
-          local song = Broadcaster.resolveSong(cfg, read())
-          if song then playlist:add(song); playlist:save(); os.queueEvent("queue_updated") end
-        end
+        local action = KEYMAP[ev[2]:lower()]
+        if action and doAction(action) then return end
+        draw()
+      elseif ev[1] == "monitor_touch" and guiButtons then
+        local id = GUI.handleTouch(guiButtons, ev[3], ev[4])
+        if id and doAction(id) then return end
         draw()
       elseif ev[1] == "timer" and ev[2] == timer then
         draw()
