@@ -79,15 +79,19 @@ CC_Radio install
 
 ## Démarrage rapide
 
+La façon la plus simple : taper **`CC_Radio`** ouvre l'**interface unifiée** (écran d'accueil
+pour choisir Broadcast / Client / Local, puis onglets Now Playing / Search / Queue).
+
 ```
--- Station radio (serveur)
-CC_Radio broadcaster --label "Ma Station"
+CC_Radio
+```
 
--- Récepteur (sur un autre ordinateur, avec speaker)
-CC_Radio client
+Les sous-commandes restent disponibles comme raccourcis :
 
--- Lecture solo, sans réseau
-CC_Radio play --query "lofi hip hop" --local
+```
+CC_Radio broadcaster --label "Ma Station"   -- station radio (serveur)
+CC_Radio client                              -- récepteur (sur un autre ordinateur)
+CC_Radio play --query "lofi hip hop" --local -- lecture solo
 ```
 
 ## Modes de fonctionnement
@@ -100,7 +104,18 @@ CC_Radio play --query "lofi hip hop" --local
 
 ## Commandes & contrôles
 
-### Commandes shell
+### Interface unifiée (`CC_Radio`)
+
+`CC_Radio` ouvre une interface intégrée sur le terminal, inspirée du lecteur de terreng :
+- **Accueil** : choix du mode (Broadcast / Client / Local).
+- **Onglets** : *Now Playing* (lecture + contrôles), *Search* (recherche **scrollable et
+  cliquable** : cliquer un titre puis `Play` / `Next` / `Queue`), *Queue* (file, clic pour retirer).
+- Navigation : clic souris + molette, ou touches `1/2/3` (onglets), `/` (recherche),
+  `P/S/B/+/-/L/Z` (contrôles), `X` (quitter).
+- **Monitor compagnon** : si un monitor est connecté, il affiche en complément le *now playing*
+  et des **boutons tactiles** (lecture/volume), détecté automatiquement à chaque lancement.
+
+### Commandes shell (raccourcis)
 
 | Commande | Description |
 |---|---|

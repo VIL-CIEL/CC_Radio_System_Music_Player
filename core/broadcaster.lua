@@ -11,8 +11,9 @@ local Downloader = require("core.downloader")
 local Audio      = require("core.audio")
 local Playlist   = require("core.playlist")
 local Network    = require("core.network")
-local CLI        = require("ui.cli")
+local CLI        = require("ui.cli") -- parseDuration
 local GUI        = require("ui.gui")
+local App        = require("ui.app")
 local Utils      = require("lib.utils")
 
 local Broadcaster = {}
@@ -49,15 +50,14 @@ function Broadcaster.run(cfg, parsed)
   local localPlay = audio:hasOutput() and not (parsed and parsed.flags["no-speaker"])
   math.randomseed(os.epoch("utc"))
 
-  -- GUI monitor (auto si présent ; --gui force, erreur si absent).
-  local guiMon, guiButtons
+  -- GUI monitor compagnon (auto si présent ; --gui force, erreur si absent).
+  local guiMon
   do
-    local mon, w, h = GUI.detect(cfg)
+    local mon, err = GUI.detect(cfg)
     if mon then
       guiMon = mon
-      guiButtons = GUI.buttons("broadcaster", w, h)
     elseif parsed and parsed.flags.gui then
-      printError("Option --gui: " .. tostring(w))
+      printError("Option --gui: " .. tostring(err))
       net:close(); return
     end
   end
@@ -240,57 +240,50 @@ function Broadcaster.run(cfg, parsed)
     end
   end
 
-  local function draw()
-    CLI.drawBroadcaster(state, playlist, audio, localPlay, clientCount(), cfg.audio_encoding)
-    if guiMon then GUI.drawBroadcaster(guiMon, state, playlist, audio, clientCount(), guiButtons) end
-  end
-
-  -- Action unique partagée clavier (uiLoop) et tactile (monitor_touch).
-  -- @return boolean exit
-  local function doAction(a)
-    if a == "exit" then
+  -- Dispatch unique : clavier/clic (App.run) et tactile (App.monitor).
+  local function dispatch(action, args)
+    args = args or {}
+    if action == "exit" then
       ctrl.exit = true; audio:stop(); os.queueEvent("rsmp_resume"); return true
-    elseif a == "playpause" then applyCommand(ctrl.paused and "resume" or "pause")
-    elseif a == "skip" then applyCommand("skip")
-    elseif a == "prev" then applyCommand("prev")
-    elseif a == "volup" then audio:setVolume(audio.volume + 0.1)
-    elseif a == "voldown" then audio:setVolume(audio.volume - 0.1)
-    elseif a == "loop" then playlist:cycleLoop(); playlist:save()
-    elseif a == "shuffle" then playlist:toggleShuffle(); playlist:save()
-    elseif a == "queue" then CLI.showQueue(playlist)
-    elseif a == "add" then
-      write("Ajouter (recherche): ")
-      local song = Broadcaster.resolveSong(cfg, read())
-      if song then playlist:add(song); playlist:save(); os.queueEvent("queue_updated") end
+    elseif action == "playpause" then applyCommand(ctrl.paused and "resume" or "pause")
+    elseif action == "skip" then applyCommand("skip")
+    elseif action == "prev" then applyCommand("prev")
+    elseif action == "stop" then applyCommand("stop")
+    elseif action == "volup" then audio:setVolume(audio.volume + 0.1)
+    elseif action == "voldown" then audio:setVolume(audio.volume - 0.1)
+    elseif action == "loop" then playlist:cycleLoop(); playlist:save()
+    elseif action == "shuffle" then playlist:toggleShuffle(); playlist:save()
+    elseif action == "status" then applyCommand("status")
+    elseif action == "playnow" and args.song then
+      playlist:add(args.song, true); playlist:save(); applyCommand("skip"); os.queueEvent("queue_updated")
+    elseif action == "playnext" and args.song then
+      playlist:add(args.song, true); playlist:save(); os.queueEvent("queue_updated")
+    elseif action == "enqueue" and args.song then
+      playlist:add(args.song); playlist:save(); os.queueEvent("queue_updated")
+    elseif action == "remove" and args.index then
+      table.remove(playlist.queue, args.index); playlist:save()
     end
     return false
   end
 
-  local KEYMAP = {
-    x = "exit", p = "playpause", s = "skip", b = "prev",
-    ["+"] = "volup", ["="] = "volup", ["-"] = "voldown",
-    l = "loop", z = "shuffle", q = "queue", a = "add",
+  local ctx = {
+    mode = "broadcaster", cfg = cfg,
+    np = function()
+      return {
+        name = state.song and state.song.name or "---",
+        artist = state.song and state.song.artist or "",
+        elapsed = state.elapsed, duration = state.duration,
+        state = state.playbackState, volume = audio.volume,
+        clients = clientCount(), label = state.label,
+      }
+    end,
+    queueList = function()
+      local q = {}
+      for i, s in ipairs(playlist.queue) do q[i] = { name = s.name, artist = s.artist } end
+      return q
+    end,
+    dispatch = dispatch,
   }
-
-  local function uiLoop()
-    draw()
-    local timer = os.startTimer(0.5)
-    while true do
-      local ev = { os.pullEvent() }
-      if ev[1] == "char" then
-        local action = KEYMAP[ev[2]:lower()]
-        if action and doAction(action) then return end
-        draw()
-      elseif ev[1] == "monitor_touch" and guiButtons then
-        local id = GUI.handleTouch(guiButtons, ev[3], ev[4])
-        if id and doAction(id) then return end
-        draw()
-      elseif ev[1] == "timer" and ev[2] == timer then
-        draw()
-        timer = os.startTimer(0.5)
-      end
-    end
-  end
 
   -- Annonce immédiate puis lancement des boucles.
   net:announce({
@@ -298,7 +291,9 @@ function Broadcaster.run(cfg, parsed)
     state = state.playbackState, song_title = state.song and state.song.name,
   })
 
-  parallel.waitForAny(audioLoop, networkLoop, metaLoop, discoveryLoop, uiLoop)
+  local tasks = { audioLoop, networkLoop, metaLoop, discoveryLoop, function() App.run(ctx) end }
+  if guiMon then tasks[#tasks + 1] = function() App.monitor(ctx, guiMon) end end
+  parallel.waitForAny(table.unpack(tasks))
 
   net:broadcastStop(state.song and state.song.id)
   audio:stop()

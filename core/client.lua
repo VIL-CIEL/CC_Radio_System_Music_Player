@@ -11,8 +11,8 @@
 local Audio     = require("core.audio")
 local Network   = require("core.network")
 local Discovery = require("lib.discovery")
-local CLI       = require("ui.cli")
 local GUI       = require("ui.gui")
+local App       = require("ui.app")
 
 local Client = {}
 
@@ -57,6 +57,7 @@ function Client.handle(ctx, sender, msg, proto)
     view.position   = msg.position or 0
     view.state      = msg.state or view.state
     view.label      = msg.label or view.label
+    view.playlist   = msg.playlist or view.playlist
     view.broadcaster = msg.broadcaster_id or view.broadcaster
     if not ctx.targetId then ctx.targetId = view.broadcaster end
   end
@@ -76,15 +77,14 @@ function Client.run(cfg, parsed)
     audio:setVolume(tonumber(parsed.flags.volume) or cfg.local_volume)
   end
 
-  -- GUI monitor (auto si présent ; --gui force).
-  local guiMon, guiButtons
+  -- GUI monitor compagnon (auto si présent ; --gui force).
+  local guiMon
   do
-    local mon, w, h = GUI.detect(cfg)
+    local mon, err = GUI.detect(cfg)
     if mon then
       guiMon = mon
-      guiButtons = GUI.buttons("client", w, h)
     elseif parsed and parsed.flags.gui then
-      printError("Option --gui: " .. tostring(w))
+      printError("Option --gui: " .. tostring(err))
       net:close(); return
     end
   end
@@ -151,54 +151,51 @@ function Client.run(cfg, parsed)
     end
   end
 
-  local function draw()
-    view.volume = audio.volume
-    CLI.drawClient(view, audio)
-    if guiMon then GUI.drawClient(guiMon, view, audio, guiButtons) end
+  -- Envoie une commande au broadcaster (avec un id direct comme une URL/ID YouTube).
+  local function sendCmd(command, args)
+    if ctx.targetId then
+      net:sendCmd(ctx.targetId, { type = "cmd", command = command, args = args or {},
+        client_id = os.getComputerID() })
+    end
   end
 
-  -- Action unique partagée clavier et tactile. @return boolean exit
-  local function doAction(a)
-    if a == "exit" or a == "disconnect" then
+  -- Dispatch : clavier/clic (App.run) et tactile (App.monitor).
+  local function dispatch(action, args)
+    args = args or {}
+    if action == "exit" or action == "disconnect" then
       ctrl.exit = true; audio:stop(); os.queueEvent("rsmp_chunk"); return true
-    elseif a == "volup" then audio:setVolume(audio.volume + 0.1)
-    elseif a == "voldown" then audio:setVolume(audio.volume - 0.1)
-    elseif a == "global" and ctx.targetId then
-      net:sendCmd(ctx.targetId, { type = "cmd", command = "volume",
-        args = { level = audio.volume }, client_id = os.getComputerID() })
-    elseif a == "status" and ctx.targetId then
-      net:sendCmd(ctx.targetId, { type = "cmd", command = "status",
-        args = {}, client_id = os.getComputerID() })
+    elseif action == "volup" then audio:setVolume(audio.volume + 0.1)
+    elseif action == "voldown" then audio:setVolume(audio.volume - 0.1)
+    elseif action == "global" then sendCmd("volume", { level = audio.volume })
+    elseif action == "status" then sendCmd("status")
+    -- Les actions de contenu sont relayées au broadcaster (id passé comme "url").
+    elseif (action == "playnow" or action == "playnext") and args.song then
+      sendCmd("play", { url = args.song.id })
+    elseif action == "enqueue" and args.song then
+      sendCmd("queue", { url = args.song.id })
     end
     return false
   end
 
-  local KEYMAP = {
-    x = "exit", ["+"] = "volup", ["="] = "volup", ["-"] = "voldown",
-    g = "global", s = "status",
-  }
-
-  local function uiLoop()
-    draw()
-    local timer = os.startTimer(0.5)
-    while true do
-      local ev = { os.pullEvent() }
-      if ev[1] == "char" then
-        local action = KEYMAP[ev[2]:lower()]
-        if action and doAction(action) then return end
-        draw()
-      elseif ev[1] == "monitor_touch" and guiButtons then
-        local id = GUI.handleTouch(guiButtons, ev[3], ev[4])
-        if id and doAction(id) then return end
-        draw()
-      elseif ev[1] == "timer" and ev[2] == timer then
-        draw()
-        timer = os.startTimer(0.5)
-      end
-    end
+  ctx.mode = "client"
+  ctx.dispatch = dispatch
+  ctx.np = function()
+    return {
+      name = view.title, artist = view.author,
+      elapsed = view.position, duration = view.duration,
+      state = view.state, volume = audio.volume,
+      signal = view.signal, label = view.label,
+    }
+  end
+  ctx.queueList = function()
+    local q = {}
+    for i, s in ipairs(view.playlist or {}) do q[i] = { name = s.title, artist = "" } end
+    return q
   end
 
-  parallel.waitForAny(netLoop, playLoop, uiLoop)
+  local tasks = { netLoop, playLoop, function() App.run(ctx) end }
+  if guiMon then tasks[#tasks + 1] = function() App.monitor(ctx, guiMon) end end
+  parallel.waitForAny(table.unpack(tasks))
 
   audio:stop()
   net:close()

@@ -94,6 +94,24 @@
   protocole, guide d'extension, dépannage, crédits terreng).
 - Validation : 12/13 + 5/5 headless (retry HTTP, régression routage, installeur + makeDir). LuaLS clean.
 
+## Correctifs & évolutions post-1.0
+
+### v1.0.1 — Lot A (correctifs)
+- **Synchro inter-clients** : chunks tagués d'un `play_at` (`os.epoch("utc")`, horloge serveur
+  partagée) ; lecture planifiée + drop des chunks trop en retard (`Client.schedule`). Config `sync_lead_ms`.
+- **Help paginé** (`textutils.pagedPrint`).
+- **Install one-liner** : `wget run <url>` ; `install.lua` lance CC_Radio à la fin.
+
+### v1.1.0 — Lot B (interface unifiée)
+- `ui/app.lua` : interface terminal type terreng — accueil (Broadcast/Client/Local) + onglets
+  Now Playing / Search / Queue, recherche **scrollable et cliquable**, contrôles. `CC_Radio`
+  sans argument l'ouvre.
+- Refactor **moteur ↔ vue** : broadcaster/client/player exposent `ctx` (`np`, `queueList`, `dispatch`) ;
+  l'UI pilote via `dispatch`. Le client peut piloter le contenu du broadcaster via la recherche (CMD).
+- `ui/gui.lua` unifié en **compagnon monitor** (now playing + boutons tactiles) pour les 3 modes.
+- Corrige : titres de recherche masqués (liste scrollable), tout accessible dans une seule interface.
+- Validation : 19/19 headless (accueil, onglets/scroll/clic/dispatch, intégration moteur+UI) + régression. LuaLS clean.
+
 ## Reste à valider en jeu (non testable en headless)
 - Rendu audio audible (broadcaster local + clients).
 - Synchro réelle broadcaster ↔ client sur 2+ machines (rednet réel).

@@ -23,6 +23,7 @@ local Playlist    = require("core.playlist")
 local Player      = require("core.player")
 local Broadcaster = require("core.broadcaster")
 local Client      = require("core.client")
+local App         = require("ui.app")
 local CLI         = require("ui.cli")
 local Help        = require("ui.help")
 
@@ -93,12 +94,7 @@ local function cmdPlayLocal(cfg, parsed)
     if song then pl:add(song, true) end -- en tête : joué en premier
   end
 
-  if pl:size() == 0 then
-    print("Queue vide. Ajoutez une chanson :")
-    print('  CC_Radio play --query "lofi" --local')
-    print('  CC_Radio queue --add "lofi"')
-    return
-  end
+  -- La file peut être vide : l'interface (onglet Search) permet d'ajouter des titres.
   Player.runLocal(cfg, pl)
 end
 
@@ -215,22 +211,28 @@ end
 local function main(...)
   local argv = { ... }
   local parsed = Utils.parseArgs(argv)
-  local command = parsed.positional[1] or "help"
+  local command = parsed.positional[1]
   local cfg = Config.load()
   local log = Logger.new({ level = cfg.log_level, toTerm = false })
-  log:info("commande: " .. command)
+  log:info("commande: " .. tostring(command or "(app)"))
 
   -- Exécute fn en capturant les erreurs (sauf interruption Ctrl+T) -> log + message clair.
   local function guard(fn)
     local ok, err = pcall(fn, cfg, parsed)
     if not ok and not tostring(err):find("Terminated") then
-      log:error(command .. ": " .. tostring(err))
+      log:error(tostring(command) .. ": " .. tostring(err))
       printError("Erreur: " .. tostring(err))
       printError("Details: " .. log.path)
     end
   end
 
-  if command == "help" then
+  if command == nil then
+    -- Aucune commande : interface unifiée (accueil -> mode).
+    local mode = App.home()
+    if mode == "broadcaster" then guard(cmdBroadcaster)
+    elseif mode == "client" then if checkMode(cfg, "client") then guard(Client.run) end
+    elseif mode == "local" then guard(cmdPlayLocal) end
+  elseif command == "help" then
     Help.show(parsed.positional[2])
   elseif command == "config" then
     cmdConfig(cfg, parsed)
