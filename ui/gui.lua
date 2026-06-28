@@ -18,7 +18,7 @@ GUI.BROADCASTER_ITEMS = {
 }
 GUI.CLIENT_ITEMS = {
   { id = "voldown", label = "VOL-" }, { id = "volup", label = "VOL+" },
-  { id = "status", label = "STAT" }, { id = "disconnect", label = "DISC" },
+  { id = "disconnect", label = "DISC" },
 }
 
 --- Détecte un monitor utilisable. @return mon, w, h  OU  nil, errstr

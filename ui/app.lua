@@ -88,6 +88,44 @@ function App.home()
   return choice ~= "quit" and choice or nil
 end
 
+--- Sélecteur de station (liste des broadcasters trouvés). @return station|nil
+function App.pickStation(stations)
+  local btns = {}
+  local function draw()
+    clear()
+    local w = term.getSize()
+    setColor(colors.yellow); term.setCursorPos(2, 1); term.write("CC_RADIO - Stations disponibles"); setColor(colors.white)
+    btns = {}
+    local y = 3
+    for i, s in ipairs(stations) do
+      local label = (" %d. %s"):format(i, s.label or ("Station " .. s.id))
+      if s.song_title and s.song_title ~= "" then label = label .. "  (" .. s.song_title .. ")" end
+      local b = { id = i, label = label:sub(1, w - 3), x = 2, y = y, w = w - 3, h = 1, bg = colors.blue }
+      Widgets.drawButton(term, b, false)
+      btns[#btns + 1] = b
+      y = y + 2
+      if y > select(2, term.getSize()) - 2 then break end
+    end
+    term.setCursorPos(2, select(2, term.getSize())); setColor(colors.gray)
+    term.write("[numero/clic] choisir   [Q] annuler"); setColor(colors.white)
+  end
+  draw()
+  while true do
+    local ev = { os.pullEvent() }
+    if ev[1] == "mouse_click" then
+      local b = Widgets.hitTest(btns, ev[3], ev[4])
+      if b then App.cleanup(); return stations[b.id] end
+    elseif ev[1] == "char" then
+      local c = ev[2]:lower()
+      if c == "q" then App.cleanup(); return nil end
+      local d = tonumber(c)
+      if d and stations[d] then App.cleanup(); return stations[d] end
+    elseif ev[1] == "term_resize" then
+      draw()
+    end
+  end
+end
+
 -- ───────────────────────── Rendu des onglets ─────────────────────────
 
 -- Onglets selon le mode : le client n'a PAS de recherche.
@@ -159,8 +197,8 @@ local function drawNowPlaying(ctx, ui)
   -- Boutons de contrôle (bas)
   local items
   if ctx.mode == "client" then
-    items = { { id = "voldown", label = "V-" }, { id = "volup", label = "V+" },
-      { id = "status", label = "STAT" }, { id = "exit", label = "QUIT" } }
+    items = { { id = "voldown", label = "VOL-" }, { id = "volup", label = "VOL+" },
+      { id = "exit", label = "QUITTER" } }
   else
     items = { { id = "prev", label = "<<" }, { id = "playpause", label = "|>" },
       { id = "skip", label = ">>" }, { id = "loop", label = "LOOP" },

@@ -103,19 +103,23 @@ function Client.run(cfg, parsed)
   local view = ctx.view
   local ctrl = { exit = false }
 
-  -- Découverte initiale.
-  print("Recherche d'une station...")
+  -- Découverte initiale : lister les stations et laisser l'utilisateur choisir.
   if not ctx.targetId then
-    local b = Discovery.findBroadcaster(net, 10)
-    if b then ctx.targetId = b.id; view.label = b.label end
+    print("Recherche des stations...")
+    local stations = Discovery.listBroadcasters(net, 2)
+    if #stations == 0 then
+      App.cleanup()
+      printError("Aucune station radio trouvee.")
+      print("Verifiez qu'un broadcaster est actif sur le reseau (modem/HTTP).")
+      net:close(); return
+    end
+    local chosen = App.pickStation(stations)
+    if not chosen then net:close(); return end
+    ctx.targetId = chosen.id; view.label = chosen.label
   end
   view.broadcaster = ctx.targetId
-  if ctx.targetId then
-    Discovery.join(net, ctx.targetId, cfg.station_label or "client")
-    view.signal = "connected"
-  else
-    print("Aucune station trouvee. En attente d'annonce...")
-  end
+  Discovery.join(net, ctx.targetId, cfg.station_label or "client")
+  view.signal = "connected"
 
   local function netLoop()
     while not ctrl.exit do
@@ -172,8 +176,6 @@ function Client.run(cfg, parsed)
       ctrl.exit = true; audio:stop(); os.queueEvent("rsmp_chunk"); return true
     elseif action == "volup" then audio:setVolume(audio.volume + 0.1)
     elseif action == "voldown" then audio:setVolume(audio.volume - 0.1)
-    elseif action == "global" then sendCmd("volume", { level = audio.volume })
-    elseif action == "status" then sendCmd("status")
     -- Les actions de contenu sont relayées au broadcaster (id passé comme "url").
     elseif (action == "playnow" or action == "playnext") and args.song then
       sendCmd("play", { url = args.song.id })

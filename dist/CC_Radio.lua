@@ -301,6 +301,29 @@ function Discovery.findBroadcaster(net, timeout)
   return nil
 end
 
+--- Liste toutes les stations actives (annonces uniques) sur une fenêtre de temps.
+-- Envoie "who" pour que les stations se signalent immédiatement.
+-- @return table liste de { id, label, song_title }
+function Discovery.listBroadcasters(net, seconds)
+  net:announce({ type = "who" })
+  local seen, list = {}, {}
+  local deadline = os.epoch("utc") + (seconds or 2) * 1000
+  while true do
+    local left = (deadline - os.epoch("utc")) / 1000
+    if left <= 0 then break end
+    local sender, msg, mproto = net:receiveAny(left)
+    if not sender then break end
+    if mproto == net.P.DISCO and type(msg) == "table" and msg.type == "announce" then
+      local id = msg.broadcaster_id or sender
+      if not seen[id] then
+        seen[id] = true
+        list[#list + 1] = { id = id, label = msg.label or ("Station " .. id), song_title = msg.song_title }
+      end
+    end
+  end
+  return list
+end
+
 --- Envoie un message DISCO:join au broadcaster (ou en broadcast si id absent).
 function Discovery.join(net, broadcasterId, label)
   net:join(broadcasterId, {
@@ -510,21 +533,18 @@ function Audio:decode(chunk)
 end
 
 --- Joue un buffer PCM décodé sur TOUS les speakers, avec backpressure.
--- Bloque jusqu'à ce que tous les speakers aient accepté le buffer.
+-- Interruptible : Audio:stop() envoie "rsmp_audio_abort" pour débloquer l'attente
+-- (speaker.stop() n'émet pas "speaker_audio_empty", ce qui bloquait pause/skip).
 function Audio:playPCM(pcm)
-  local fns = {}
-  for i, spk in ipairs(self.speakers) do
-    local name = peripheral.getName(spk)
-    fns[i] = function()
-      while not spk.playAudio(pcm, self.volume) do
-        repeat
-          local _, sn = os.pullEvent("speaker_audio_empty")
-        until sn == name
-      end
+  self.playing = true
+  for _, spk in ipairs(self.speakers) do
+    while self.playing do
+      if spk.playAudio(pcm, self.volume) then break end
+      -- buffer plein : attendre qu'il se libère, ou un abandon (pause/skip/stop)
+      local ev = os.pullEvent()
+      if ev == "rsmp_audio_abort" then self.playing = false end
     end
-  end
-  if #fns > 0 then
-    parallel.waitForAll(table.unpack(fns))
+    if not self.playing then break end
   end
 end
 
@@ -548,9 +568,11 @@ function Audio:streamPlay(stream, onChunk)
   return samples
 end
 
---- Arrête immédiatement tous les speakers (flush des buffers).
+--- Arrête immédiatement tous les speakers (flush des buffers) et débloque playPCM.
 function Audio:stop()
+  self.playing = false
   for _, spk in ipairs(self.speakers) do pcall(spk.stop) end
+  os.queueEvent("rsmp_audio_abort")
 end
 
 --- Convertit un nombre de samples en secondes.
@@ -1449,19 +1471,23 @@ function Client.run(cfg, parsed)
   local view = ctx.view
   local ctrl = { exit = false }
 
-  -- Découverte initiale.
-  print("Recherche d'une station...")
+  -- Découverte initiale : lister les stations et laisser l'utilisateur choisir.
   if not ctx.targetId then
-    local b = Discovery.findBroadcaster(net, 10)
-    if b then ctx.targetId = b.id; view.label = b.label end
+    print("Recherche des stations...")
+    local stations = Discovery.listBroadcasters(net, 2)
+    if #stations == 0 then
+      App.cleanup()
+      printError("Aucune station radio trouvee.")
+      print("Verifiez qu'un broadcaster est actif sur le reseau (modem/HTTP).")
+      net:close(); return
+    end
+    local chosen = App.pickStation(stations)
+    if not chosen then net:close(); return end
+    ctx.targetId = chosen.id; view.label = chosen.label
   end
   view.broadcaster = ctx.targetId
-  if ctx.targetId then
-    Discovery.join(net, ctx.targetId, cfg.station_label or "client")
-    view.signal = "connected"
-  else
-    print("Aucune station trouvee. En attente d'annonce...")
-  end
+  Discovery.join(net, ctx.targetId, cfg.station_label or "client")
+  view.signal = "connected"
 
   local function netLoop()
     while not ctrl.exit do
@@ -1518,8 +1544,6 @@ function Client.run(cfg, parsed)
       ctrl.exit = true; audio:stop(); os.queueEvent("rsmp_chunk"); return true
     elseif action == "volup" then audio:setVolume(audio.volume + 0.1)
     elseif action == "voldown" then audio:setVolume(audio.volume - 0.1)
-    elseif action == "global" then sendCmd("volume", { level = audio.volume })
-    elseif action == "status" then sendCmd("status")
     -- Les actions de contenu sont relayées au broadcaster (id passé comme "url").
     elseif (action == "playnow" or action == "playnext") and args.song then
       sendCmd("play", { url = args.song.id })
@@ -1649,7 +1673,7 @@ GUI.BROADCASTER_ITEMS = {
 }
 GUI.CLIENT_ITEMS = {
   { id = "voldown", label = "VOL-" }, { id = "volup", label = "VOL+" },
-  { id = "status", label = "STAT" }, { id = "disconnect", label = "DISC" },
+  { id = "disconnect", label = "DISC" },
 }
 
 --- Détecte un monitor utilisable. @return mon, w, h  OU  nil, errstr
@@ -2194,6 +2218,44 @@ function App.home()
   return choice ~= "quit" and choice or nil
 end
 
+--- Sélecteur de station (liste des broadcasters trouvés). @return station|nil
+function App.pickStation(stations)
+  local btns = {}
+  local function draw()
+    clear()
+    local w = term.getSize()
+    setColor(colors.yellow); term.setCursorPos(2, 1); term.write("CC_RADIO - Stations disponibles"); setColor(colors.white)
+    btns = {}
+    local y = 3
+    for i, s in ipairs(stations) do
+      local label = (" %d. %s"):format(i, s.label or ("Station " .. s.id))
+      if s.song_title and s.song_title ~= "" then label = label .. "  (" .. s.song_title .. ")" end
+      local b = { id = i, label = label:sub(1, w - 3), x = 2, y = y, w = w - 3, h = 1, bg = colors.blue }
+      Widgets.drawButton(term, b, false)
+      btns[#btns + 1] = b
+      y = y + 2
+      if y > select(2, term.getSize()) - 2 then break end
+    end
+    term.setCursorPos(2, select(2, term.getSize())); setColor(colors.gray)
+    term.write("[numero/clic] choisir   [Q] annuler"); setColor(colors.white)
+  end
+  draw()
+  while true do
+    local ev = { os.pullEvent() }
+    if ev[1] == "mouse_click" then
+      local b = Widgets.hitTest(btns, ev[3], ev[4])
+      if b then App.cleanup(); return stations[b.id] end
+    elseif ev[1] == "char" then
+      local c = ev[2]:lower()
+      if c == "q" then App.cleanup(); return nil end
+      local d = tonumber(c)
+      if d and stations[d] then App.cleanup(); return stations[d] end
+    elseif ev[1] == "term_resize" then
+      draw()
+    end
+  end
+end
+
 -- ───────────────────────── Rendu des onglets ─────────────────────────
 
 -- Onglets selon le mode : le client n'a PAS de recherche.
@@ -2265,8 +2327,8 @@ local function drawNowPlaying(ctx, ui)
   -- Boutons de contrôle (bas)
   local items
   if ctx.mode == "client" then
-    items = { { id = "voldown", label = "V-" }, { id = "volup", label = "V+" },
-      { id = "status", label = "STAT" }, { id = "exit", label = "QUIT" } }
+    items = { { id = "voldown", label = "VOL-" }, { id = "volup", label = "VOL+" },
+      { id = "exit", label = "QUITTER" } }
   else
     items = { { id = "prev", label = "<<" }, { id = "playpause", label = "|>" },
       { id = "skip", label = ">>" }, { id = "loop", label = "LOOP" },

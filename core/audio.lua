@@ -35,21 +35,18 @@ function Audio:decode(chunk)
 end
 
 --- Joue un buffer PCM décodé sur TOUS les speakers, avec backpressure.
--- Bloque jusqu'à ce que tous les speakers aient accepté le buffer.
+-- Interruptible : Audio:stop() envoie "rsmp_audio_abort" pour débloquer l'attente
+-- (speaker.stop() n'émet pas "speaker_audio_empty", ce qui bloquait pause/skip).
 function Audio:playPCM(pcm)
-  local fns = {}
-  for i, spk in ipairs(self.speakers) do
-    local name = peripheral.getName(spk)
-    fns[i] = function()
-      while not spk.playAudio(pcm, self.volume) do
-        repeat
-          local _, sn = os.pullEvent("speaker_audio_empty")
-        until sn == name
-      end
+  self.playing = true
+  for _, spk in ipairs(self.speakers) do
+    while self.playing do
+      if spk.playAudio(pcm, self.volume) then break end
+      -- buffer plein : attendre qu'il se libère, ou un abandon (pause/skip/stop)
+      local ev = os.pullEvent()
+      if ev == "rsmp_audio_abort" then self.playing = false end
     end
-  end
-  if #fns > 0 then
-    parallel.waitForAll(table.unpack(fns))
+    if not self.playing then break end
   end
 end
 
@@ -73,9 +70,11 @@ function Audio:streamPlay(stream, onChunk)
   return samples
 end
 
---- Arrête immédiatement tous les speakers (flush des buffers).
+--- Arrête immédiatement tous les speakers (flush des buffers) et débloque playPCM.
 function Audio:stop()
+  self.playing = false
   for _, spk in ipairs(self.speakers) do pcall(spk.stop) end
+  os.queueEvent("rsmp_audio_abort")
 end
 
 --- Convertit un nombre de samples en secondes.
