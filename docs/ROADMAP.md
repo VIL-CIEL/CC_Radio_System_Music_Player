@@ -115,7 +115,7 @@
 ### v1.2.0 — Distribution fichier unique
 - `build.lua` : concatène les modules (via `package.preload`) + le point d'entrée en un seul
   `dist/CC_Radio.lua` exécutable. Source reste modulaire (relancer `build` après modif).
-- **Install** : un seul fichier téléchargé ; **désinstall** : `delete CC_Radio`.
+- **Install** : un seul fichier téléchargé ; **désinstall** : `delete CC_Radio.lua`.
 - `install.lua` et la commande `install` récupèrent le fichier unique ; `install` se met à jour
   lui-même (écrit sur `shell.getRunningProgram()`).
 - Validation : bundle testé **standalone** (modules chargés sans aucun fichier annexe), suppression vérifiée. LuaLS clean.

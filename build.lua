@@ -2,7 +2,7 @@
   Génère dist/CC_Radio.lua : un FICHIER UNIQUE exécutable regroupant tous les modules
   (via package.preload) + le point d'entrée. Permet une install/désinstall triviales :
     install  : un seul fichier à télécharger
-    désinstall : delete CC_Radio
+    désinstall : delete CC_Radio.lua
 
   Le code source reste modulaire (core/ ui/ lib/) ; relancer build.lua après modification.
   Exécuter sur un ordinateur/émulateur disposant des sources : `build`

@@ -198,7 +198,7 @@ local function cmdInstall(_cfg, _parsed)
   local prog = shell.getRunningProgram()
   local f = fs.open(prog, "w"); f.write(data); f.close()
   print("Mis a jour : " .. prog)
-  print("(Desinstallation : delete CC_Radio)")
+  print("(Desinstallation : delete CC_Radio.lua)")
 end
 
 -- Commandes de contrôle non actionnables en autonome (clavier en lecture, réseau en S3/S4).

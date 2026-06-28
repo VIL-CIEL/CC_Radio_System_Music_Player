@@ -77,7 +77,7 @@ puis démarre l'interface. Pour **mettre à jour** : `CC_Radio install`.
 Comme tout tient dans un seul fichier :
 
 ```
-delete CC_Radio
+delete CC_Radio.lua
 ```
 
 > Les données utilisateur (`config.json`, `queue.dat`, `CC_Radio.log`) sont des fichiers
