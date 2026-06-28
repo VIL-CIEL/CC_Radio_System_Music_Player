@@ -1,11 +1,11 @@
 --[[ CC_RSMP - core/playlist.lua
   Gestion de la file de lecture : queue, historique, shuffle, loop (off/one/all).
   Logique pure (aucune E/S audio/réseau) -> entièrement testable hors-jeu.
-  Persistance dans queue.dat (textutils.serialize).
+  La file est volatile (propre à chaque session) : aucune persistance disque.
+  Les préférences loop/shuffle sont gérées hors de la file (config.json).
 ]]
 local Playlist = {}
 Playlist.__index = Playlist
-Playlist.PATH = "queue.dat"
 
 --- @param opts table { loop, shuffle, maxQueue, maxHistory }
 function Playlist.new(opts)
@@ -108,37 +108,6 @@ end
 function Playlist:toggleShuffle()
   self.shuffle = not self.shuffle
   return self.shuffle
-end
-
--- ── Persistance ──────────────────────────────────────────────────────────────
-
-function Playlist:save(path)
-  path = path or Playlist.PATH
-  local f = fs.open(path, "w")
-  if not f then return false end
-  f.write(textutils.serialize({ queue = self.queue, loop = self.loop, shuffle = self.shuffle }))
-  f.close()
-  return true
-end
-
---- Charge la queue persistée (queue/loop/shuffle). L'historique et current ne sont pas persistés.
-function Playlist.load(path, opts)
-  path = path or Playlist.PATH
-  local pl = Playlist.new(opts)
-  if fs.exists(path) then
-    local f = fs.open(path, "r")
-    if f then
-      local raw = f.readAll()
-      f.close()
-      local ok, data = pcall(textutils.unserialize, raw)
-      if ok and type(data) == "table" then
-        pl.queue   = data.queue or {}
-        pl.loop    = data.loop or pl.loop
-        pl.shuffle = data.shuffle and true or false
-      end
-    end
-  end
-  return pl
 end
 
 return Playlist

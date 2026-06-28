@@ -115,7 +115,7 @@ Config.DEFAULTS = {
   chunk_size_kb          = 16,                -- spike S0 : 16 KiB OK (round-trip intègre, ~3.2x sérialisé)
   audio_encoding         = "base64",          -- "base64" (~1.34x) | "raw" (~3.2x) — spike S3
   http_retries           = 2,                 -- nb de tentatives supplémentaires sur échec HTTP
-  sync_lead_ms           = 2000,              -- avance (ms) entre envoi et lecture client (synchro inter-clients)
+  sync_lead_ms           = 1000,              -- avance (ms) envoi->lecture client (latence ; synchro inter-clients)
   meta_interval_sec      = 5,
   discovery_interval_sec = 30,
   log_level              = "info",            -- "debug" | "info" | "warn" | "error"
@@ -587,11 +587,11 @@ preload["core.playlist"] = function(...)
 --[[ CC_RSMP - core/playlist.lua
   Gestion de la file de lecture : queue, historique, shuffle, loop (off/one/all).
   Logique pure (aucune E/S audio/réseau) -> entièrement testable hors-jeu.
-  Persistance dans queue.dat (textutils.serialize).
+  La file est volatile (propre à chaque session) : aucune persistance disque.
+  Les préférences loop/shuffle sont gérées hors de la file (config.json).
 ]]
 local Playlist = {}
 Playlist.__index = Playlist
-Playlist.PATH = "queue.dat"
 
 --- @param opts table { loop, shuffle, maxQueue, maxHistory }
 function Playlist.new(opts)
@@ -696,37 +696,6 @@ function Playlist:toggleShuffle()
   return self.shuffle
 end
 
--- ── Persistance ──────────────────────────────────────────────────────────────
-
-function Playlist:save(path)
-  path = path or Playlist.PATH
-  local f = fs.open(path, "w")
-  if not f then return false end
-  f.write(textutils.serialize({ queue = self.queue, loop = self.loop, shuffle = self.shuffle }))
-  f.close()
-  return true
-end
-
---- Charge la queue persistée (queue/loop/shuffle). L'historique et current ne sont pas persistés.
-function Playlist.load(path, opts)
-  path = path or Playlist.PATH
-  local pl = Playlist.new(opts)
-  if fs.exists(path) then
-    local f = fs.open(path, "r")
-    if f then
-      local raw = f.readAll()
-      f.close()
-      local ok, data = pcall(textutils.unserialize, raw)
-      if ok and type(data) == "table" then
-        pl.queue   = data.queue or {}
-        pl.loop    = data.loop or pl.loop
-        pl.shuffle = data.shuffle and true or false
-      end
-    end
-  end
-  return pl
-end
-
 return Playlist
 
 end
@@ -737,6 +706,7 @@ preload["core.player"] = function(...)
 ]]
 local Downloader = require("core.downloader")
 local Audio      = require("core.audio")
+local Config     = require("lib.config")
 local CLI        = require("ui.cli") -- parseDuration
 local App        = require("ui.app")
 local GUI        = require("ui.gui")
@@ -828,17 +798,17 @@ function Player.runLocal(cfg, playlist)
       ctrl.prevReq = true; ctrl.skip = true; audio:stop(); os.queueEvent("rsmp_resume")
     elseif action == "volup" then audio:setVolume(audio.volume + 0.1)
     elseif action == "voldown" then audio:setVolume(audio.volume - 0.1)
-    elseif action == "loop" then playlist:cycleLoop(); playlist:save()
-    elseif action == "shuffle" then playlist:toggleShuffle(); playlist:save()
+    elseif action == "loop" then cfg.loop = playlist:cycleLoop(); Config.save(cfg)
+    elseif action == "shuffle" then cfg.shuffle = playlist:toggleShuffle(); Config.save(cfg)
     elseif action == "playnow" and args.song then
-      playlist:add(args.song, true); playlist:save()
+      playlist:add(args.song, true)
       ctrl.skip = true; audio:stop(); os.queueEvent("rsmp_resume"); os.queueEvent("queue_updated")
     elseif action == "playnext" and args.song then
-      playlist:add(args.song, true); playlist:save(); os.queueEvent("queue_updated")
+      playlist:add(args.song, true); os.queueEvent("queue_updated")
     elseif action == "enqueue" and args.song then
-      playlist:add(args.song); playlist:save(); os.queueEvent("queue_updated")
+      playlist:add(args.song); os.queueEvent("queue_updated")
     elseif action == "remove" and args.index then
-      table.remove(playlist.queue, args.index); playlist:save()
+      table.remove(playlist.queue, args.index)
     end
     return false
   end
@@ -866,7 +836,7 @@ function Player.runLocal(cfg, playlist)
   if guiMon then tasks[#tasks + 1] = function() App.monitor(ctx, guiMon) end end
   parallel.waitForAny(table.unpack(tasks))
 
-  audio:stop(); playlist:save()
+  audio:stop()
   App.cleanup(guiMon)
   print("Lecture terminee.")
 end
@@ -1005,6 +975,7 @@ preload["core.broadcaster"] = function(...)
 local Downloader = require("core.downloader")
 local Audio      = require("core.audio")
 local Playlist   = require("core.playlist")
+local Config     = require("lib.config")
 local Network    = require("core.network")
 local CLI        = require("ui.cli") -- parseDuration
 local GUI        = require("ui.gui")
@@ -1111,7 +1082,7 @@ function Broadcaster.run(cfg, parsed)
     end
   end
 
-  local playlist = Playlist.load(Playlist.PATH, {
+  local playlist = Playlist.new({ -- file volatile (vidée à chaque session)
     loop = cfg.loop, shuffle = cfg.shuffle,
     maxQueue = cfg.max_queue_size, maxHistory = cfg.history_size,
   })
@@ -1180,15 +1151,15 @@ function Broadcaster.run(cfg, parsed)
       if args.level then audio:setVolume(tonumber(args.level) or audio.volume) end
     elseif command == "loop" then
       if args.mode == "off" or args.mode == "one" or args.mode == "all" then
-        playlist.loop = args.mode; playlist:save()
+        playlist.loop = args.mode; cfg.loop = args.mode; Config.save(cfg)
       end
     elseif command == "shuffle" then
-      playlist.shuffle = args.enabled and true or false; playlist:save()
+      playlist.shuffle = args.enabled and true or false
+      cfg.shuffle = playlist.shuffle; Config.save(cfg)
     elseif command == "play" or command == "queue" then
       local song = Broadcaster.resolveSong(cfg, args.query, args.url)
       if song then
         playlist:add(song, command == "play")
-        playlist:save()
         os.queueEvent("queue_updated")
       end
     elseif command == "status" then
@@ -1310,17 +1281,17 @@ function Broadcaster.run(cfg, parsed)
     elseif action == "stop" then applyCommand("stop")
     elseif action == "volup" then audio:setVolume(audio.volume + 0.1)
     elseif action == "voldown" then audio:setVolume(audio.volume - 0.1)
-    elseif action == "loop" then playlist:cycleLoop(); playlist:save()
-    elseif action == "shuffle" then playlist:toggleShuffle(); playlist:save()
+    elseif action == "loop" then cfg.loop = playlist:cycleLoop(); Config.save(cfg)
+    elseif action == "shuffle" then cfg.shuffle = playlist:toggleShuffle(); Config.save(cfg)
     elseif action == "status" then applyCommand("status")
     elseif action == "playnow" and args.song then
-      playlist:add(args.song, true); playlist:save(); applyCommand("skip"); os.queueEvent("queue_updated")
+      playlist:add(args.song, true); applyCommand("skip"); os.queueEvent("queue_updated")
     elseif action == "playnext" and args.song then
-      playlist:add(args.song, true); playlist:save(); os.queueEvent("queue_updated")
+      playlist:add(args.song, true); os.queueEvent("queue_updated")
     elseif action == "enqueue" and args.song then
-      playlist:add(args.song); playlist:save(); os.queueEvent("queue_updated")
+      playlist:add(args.song); os.queueEvent("queue_updated")
     elseif action == "remove" and args.index then
-      table.remove(playlist.queue, args.index); playlist:save()
+      table.remove(playlist.queue, args.index)
     end
     return false
   end
@@ -1356,7 +1327,6 @@ function Broadcaster.run(cfg, parsed)
 
   net:broadcastStop(state.song and state.song.id)
   audio:stop()
-  playlist:save()
   net:close()
   App.cleanup(guiMon)
   print("Broadcaster arrete.")
@@ -2025,7 +1995,6 @@ COMMANDES:
   broadcaster        Demarrer une station radio (serveur)
   client             Se connecter a une station (recepteur)
   play <query|url>   Ajouter et jouer une chanson
-  queue              Gerer la playlist (--add/--clear/--list)
   status             Afficher l'etat du broadcaster
   stop               Arreter la lecture
   volume <0.0-3.0>   Regler le volume (--local/--global)
@@ -2565,7 +2534,7 @@ for k, v in pairs(preload) do package.preload[k] = v end
   verification des prerequis. Les modes audio/reseau/GUI arrivent aux
   sprints suivants (voir docs/ROADMAP.md).
 ]]
-local VERSION = "1.5.1"
+local VERSION = "1.6.0"
 
 -- Resolution des modules relatifs au programme (pattern valide en CraftOS-PC).
 local selfDir = fs.getDir(shell.getRunningProgram())
@@ -2574,14 +2543,12 @@ package.path = ("/%s/?.lua;/%s/?/init.lua;"):format(selfDir, selfDir) .. package
 local Utils      = require("lib.utils")
 local Config     = require("lib.config")
 local Logger     = require("lib.logger")
-local Prereq     = require("core.prereq")
-local Downloader  = require("core.downloader")
+local Prereq      = require("core.prereq")
 local Playlist    = require("core.playlist")
 local Player      = require("core.player")
 local Broadcaster = require("core.broadcaster")
 local Client      = require("core.client")
 local App         = require("ui.app")
-local CLI         = require("ui.cli")
 local Help        = require("ui.help")
 
 local CONTROL_CMDS = { "status", "stop", "skip", "pause", "resume", "prev" }
@@ -2630,9 +2597,10 @@ local function checkMode(cfg, mode)
   return r.ok
 end
 
--- Charge la playlist persistée avec les paramètres issus de la config.
-local function loadPlaylist(cfg)
-  return Playlist.load(Playlist.PATH, {
+-- Crée une file VIDE pour la session (préférences loop/shuffle issues de la config).
+-- La file n'est plus persistée : chaque session démarre propre.
+local function newPlaylist(cfg)
+  return Playlist.new({
     loop       = cfg.loop,
     shuffle    = cfg.shuffle,
     maxQueue   = cfg.max_queue_size,
@@ -2642,7 +2610,7 @@ end
 
 -- Lecture locale interactive : charge la queue, ajoute la chanson demandée, lance le lecteur.
 local function cmdPlayLocal(cfg, parsed)
-  local pl = loadPlaylist(cfg)
+  local pl = newPlaylist(cfg)
 
   local query   = parsed and (parsed.flags.query or parsed.positional[2]) or nil
   local youtube = parsed and parsed.flags.youtube or nil
@@ -2674,45 +2642,11 @@ local function cmdPlay(cfg, parsed)
   end
 end
 
--- Résout une chanson pour `queue --add` (recherche interactive ou id/URL YouTube).
-local function resolveForQueue(cfg, parsed)
-  if parsed.flags.youtube then
-    local id = Utils.extractYtId(parsed.flags.youtube)
-    if not id then printError("URL/ID YouTube invalide."); return nil end
-    return { id = id, name = "(YouTube " .. id .. ")", artist = "" }
-  end
-  local query = (type(parsed.flags.add) == "string" and parsed.flags.add) or parsed.flags.query
-  if not query then
-    printError('Usage: CC_Radio queue --add "..."  (ou --add --youtube <url>)')
-    return nil
-  end
-  print("Recherche: " .. query .. " ...")
-  local results, err = Downloader.search(cfg, query)
-  if not results then printError(err); return nil end
-  return CLI.pickResult(results)
-end
-
-local function cmdQueue(cfg, parsed)
-  local pl = loadPlaylist(cfg)
-  if parsed.flags.clear then
-    pl:clear(); pl:save(); print("Queue videe.")
-  elseif parsed.flags.add then
-    local song = resolveForQueue(cfg, parsed)
-    if song then
-      local ok, e = pl:add(song)
-      if ok then pl:save(); print("Ajoute: " .. (Utils.trim(song.name) or song.id))
-      else printError(e) end
-    end
-  else
-    CLI.printQueue(pl)
-  end
-end
-
+-- loop/shuffle : préférences persistées dans la config (la file, elle, est volatile).
 local function cmdLoop(cfg, parsed)
   local mode = parsed.positional[2]
   if mode == "off" or mode == "one" or mode == "all" then
     cfg.loop = mode; Config.save(cfg)
-    local pl = loadPlaylist(cfg); pl.loop = mode; pl:save()
     print("Loop: " .. mode)
   else
     print("Loop actuel: " .. cfg.loop .. "   (usage: loop off|one|all)")
@@ -2722,8 +2656,7 @@ end
 local function cmdShuffle(cfg, parsed)
   local v = parsed.positional[2]
   if v == "on" or v == "off" then
-    local b = (v == "on"); cfg.shuffle = b; Config.save(cfg)
-    local pl = loadPlaylist(cfg); pl.shuffle = b; pl:save()
+    cfg.shuffle = (v == "on"); Config.save(cfg)
     print("Shuffle: " .. v)
   else
     print("Shuffle actuel: " .. tostring(cfg.shuffle) .. "   (usage: shuffle on|off)")
@@ -2801,8 +2734,6 @@ local function main(...)
     guard(cmdPlayLocal)
   elseif command == "play" then
     guard(cmdPlay)
-  elseif command == "queue" then
-    cmdQueue(cfg, parsed)
   elseif command == "loop" then
     cmdLoop(cfg, parsed)
   elseif command == "shuffle" then

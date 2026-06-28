@@ -10,6 +10,7 @@
 local Downloader = require("core.downloader")
 local Audio      = require("core.audio")
 local Playlist   = require("core.playlist")
+local Config     = require("lib.config")
 local Network    = require("core.network")
 local CLI        = require("ui.cli") -- parseDuration
 local GUI        = require("ui.gui")
@@ -116,7 +117,7 @@ function Broadcaster.run(cfg, parsed)
     end
   end
 
-  local playlist = Playlist.load(Playlist.PATH, {
+  local playlist = Playlist.new({ -- file volatile (vidée à chaque session)
     loop = cfg.loop, shuffle = cfg.shuffle,
     maxQueue = cfg.max_queue_size, maxHistory = cfg.history_size,
   })
@@ -185,15 +186,15 @@ function Broadcaster.run(cfg, parsed)
       if args.level then audio:setVolume(tonumber(args.level) or audio.volume) end
     elseif command == "loop" then
       if args.mode == "off" or args.mode == "one" or args.mode == "all" then
-        playlist.loop = args.mode; playlist:save()
+        playlist.loop = args.mode; cfg.loop = args.mode; Config.save(cfg)
       end
     elseif command == "shuffle" then
-      playlist.shuffle = args.enabled and true or false; playlist:save()
+      playlist.shuffle = args.enabled and true or false
+      cfg.shuffle = playlist.shuffle; Config.save(cfg)
     elseif command == "play" or command == "queue" then
       local song = Broadcaster.resolveSong(cfg, args.query, args.url)
       if song then
         playlist:add(song, command == "play")
-        playlist:save()
         os.queueEvent("queue_updated")
       end
     elseif command == "status" then
@@ -315,17 +316,17 @@ function Broadcaster.run(cfg, parsed)
     elseif action == "stop" then applyCommand("stop")
     elseif action == "volup" then audio:setVolume(audio.volume + 0.1)
     elseif action == "voldown" then audio:setVolume(audio.volume - 0.1)
-    elseif action == "loop" then playlist:cycleLoop(); playlist:save()
-    elseif action == "shuffle" then playlist:toggleShuffle(); playlist:save()
+    elseif action == "loop" then cfg.loop = playlist:cycleLoop(); Config.save(cfg)
+    elseif action == "shuffle" then cfg.shuffle = playlist:toggleShuffle(); Config.save(cfg)
     elseif action == "status" then applyCommand("status")
     elseif action == "playnow" and args.song then
-      playlist:add(args.song, true); playlist:save(); applyCommand("skip"); os.queueEvent("queue_updated")
+      playlist:add(args.song, true); applyCommand("skip"); os.queueEvent("queue_updated")
     elseif action == "playnext" and args.song then
-      playlist:add(args.song, true); playlist:save(); os.queueEvent("queue_updated")
+      playlist:add(args.song, true); os.queueEvent("queue_updated")
     elseif action == "enqueue" and args.song then
-      playlist:add(args.song); playlist:save(); os.queueEvent("queue_updated")
+      playlist:add(args.song); os.queueEvent("queue_updated")
     elseif action == "remove" and args.index then
-      table.remove(playlist.queue, args.index); playlist:save()
+      table.remove(playlist.queue, args.index)
     end
     return false
   end
@@ -361,7 +362,6 @@ function Broadcaster.run(cfg, parsed)
 
   net:broadcastStop(state.song and state.song.id)
   audio:stop()
-  playlist:save()
   net:close()
   App.cleanup(guiMon)
   print("Broadcaster arrete.")

@@ -8,7 +8,7 @@
   verification des prerequis. Les modes audio/reseau/GUI arrivent aux
   sprints suivants (voir docs/ROADMAP.md).
 ]]
-local VERSION = "1.5.1"
+local VERSION = "1.6.0"
 
 -- Resolution des modules relatifs au programme (pattern valide en CraftOS-PC).
 local selfDir = fs.getDir(shell.getRunningProgram())
@@ -17,14 +17,12 @@ package.path = ("/%s/?.lua;/%s/?/init.lua;"):format(selfDir, selfDir) .. package
 local Utils      = require("lib.utils")
 local Config     = require("lib.config")
 local Logger     = require("lib.logger")
-local Prereq     = require("core.prereq")
-local Downloader  = require("core.downloader")
+local Prereq      = require("core.prereq")
 local Playlist    = require("core.playlist")
 local Player      = require("core.player")
 local Broadcaster = require("core.broadcaster")
 local Client      = require("core.client")
 local App         = require("ui.app")
-local CLI         = require("ui.cli")
 local Help        = require("ui.help")
 
 local CONTROL_CMDS = { "status", "stop", "skip", "pause", "resume", "prev" }
@@ -73,9 +71,10 @@ local function checkMode(cfg, mode)
   return r.ok
 end
 
--- Charge la playlist persistée avec les paramètres issus de la config.
-local function loadPlaylist(cfg)
-  return Playlist.load(Playlist.PATH, {
+-- Crée une file VIDE pour la session (préférences loop/shuffle issues de la config).
+-- La file n'est plus persistée : chaque session démarre propre.
+local function newPlaylist(cfg)
+  return Playlist.new({
     loop       = cfg.loop,
     shuffle    = cfg.shuffle,
     maxQueue   = cfg.max_queue_size,
@@ -85,7 +84,7 @@ end
 
 -- Lecture locale interactive : charge la queue, ajoute la chanson demandée, lance le lecteur.
 local function cmdPlayLocal(cfg, parsed)
-  local pl = loadPlaylist(cfg)
+  local pl = newPlaylist(cfg)
 
   local query   = parsed and (parsed.flags.query or parsed.positional[2]) or nil
   local youtube = parsed and parsed.flags.youtube or nil
@@ -117,45 +116,11 @@ local function cmdPlay(cfg, parsed)
   end
 end
 
--- Résout une chanson pour `queue --add` (recherche interactive ou id/URL YouTube).
-local function resolveForQueue(cfg, parsed)
-  if parsed.flags.youtube then
-    local id = Utils.extractYtId(parsed.flags.youtube)
-    if not id then printError("URL/ID YouTube invalide."); return nil end
-    return { id = id, name = "(YouTube " .. id .. ")", artist = "" }
-  end
-  local query = (type(parsed.flags.add) == "string" and parsed.flags.add) or parsed.flags.query
-  if not query then
-    printError('Usage: CC_Radio queue --add "..."  (ou --add --youtube <url>)')
-    return nil
-  end
-  print("Recherche: " .. query .. " ...")
-  local results, err = Downloader.search(cfg, query)
-  if not results then printError(err); return nil end
-  return CLI.pickResult(results)
-end
-
-local function cmdQueue(cfg, parsed)
-  local pl = loadPlaylist(cfg)
-  if parsed.flags.clear then
-    pl:clear(); pl:save(); print("Queue videe.")
-  elseif parsed.flags.add then
-    local song = resolveForQueue(cfg, parsed)
-    if song then
-      local ok, e = pl:add(song)
-      if ok then pl:save(); print("Ajoute: " .. (Utils.trim(song.name) or song.id))
-      else printError(e) end
-    end
-  else
-    CLI.printQueue(pl)
-  end
-end
-
+-- loop/shuffle : préférences persistées dans la config (la file, elle, est volatile).
 local function cmdLoop(cfg, parsed)
   local mode = parsed.positional[2]
   if mode == "off" or mode == "one" or mode == "all" then
     cfg.loop = mode; Config.save(cfg)
-    local pl = loadPlaylist(cfg); pl.loop = mode; pl:save()
     print("Loop: " .. mode)
   else
     print("Loop actuel: " .. cfg.loop .. "   (usage: loop off|one|all)")
@@ -165,8 +130,7 @@ end
 local function cmdShuffle(cfg, parsed)
   local v = parsed.positional[2]
   if v == "on" or v == "off" then
-    local b = (v == "on"); cfg.shuffle = b; Config.save(cfg)
-    local pl = loadPlaylist(cfg); pl.shuffle = b; pl:save()
+    cfg.shuffle = (v == "on"); Config.save(cfg)
     print("Shuffle: " .. v)
   else
     print("Shuffle actuel: " .. tostring(cfg.shuffle) .. "   (usage: shuffle on|off)")
@@ -244,8 +208,6 @@ local function main(...)
     guard(cmdPlayLocal)
   elseif command == "play" then
     guard(cmdPlay)
-  elseif command == "queue" then
-    cmdQueue(cfg, parsed)
   elseif command == "loop" then
     cmdLoop(cfg, parsed)
   elseif command == "shuffle" then

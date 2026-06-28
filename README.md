@@ -80,9 +80,9 @@ Comme tout tient dans un seul fichier :
 delete CC_Radio.lua
 ```
 
-> Les données utilisateur (`config.json`, `queue.dat`) sont des fichiers séparés
-> (`CC_Radio.log` n'est créé qu'en cas d'erreur). Pour tout retirer :
-> `delete config.json queue.dat CC_Radio.log`.
+> La configuration (`config.json`) est un fichier séparé (`CC_Radio.log` n'est créé
+> qu'en cas d'erreur ; la file de lecture n'est pas persistée). Pour tout retirer :
+> `delete config.json CC_Radio.log`.
 
 ## Démarrage rapide
 
@@ -129,8 +129,7 @@ CC_Radio play --query "lofi hip hop" --local -- lecture solo
 | `broadcaster [--label N] [--no-speaker] [--gui] [--local]` | Démarrer une station |
 | `client [--id N] [--volume F] [--gui]` | Rejoindre une station |
 | `play <query> [--local] [--youtube URL]` | Jouer / diffuser une chanson (raccourci broadcaster) |
-| `queue [--add Q] [--list] [--clear]` | Gérer la file (persistée) |
-| `loop [off\|one\|all]` · `shuffle [on\|off]` | Modes de lecture |
+| `loop [off\|one\|all]` · `shuffle [on\|off]` | Modes de lecture (préférence persistée) |
 | `volume <0.0-3.0> [--local\|--global]` | Régler le volume |
 | `config [--show] [--set K V] [--reset]` | Configuration |
 | `install` | Installer / mettre à jour |
@@ -208,7 +207,7 @@ CC_Radio.lua        Point d'entrée : parsing CLI, routage, garde anti-crash + l
 core/
   downloader.lua    Recherche + streaming HTTP (retry), objet Stream
   audio.lua         Décodage DFPWM, playback multi-speakers, volume
-  playlist.lua      File, shuffle, loop, historique, persistance (queue.dat)
+  playlist.lua      File (volatile), shuffle, loop, historique
   player.lua        Lecteur local interactif
   broadcaster.lua   Serveur : 5 boucles parallèles + handler de commandes
   client.lua        Récepteur : réception/décodage/playback + resync

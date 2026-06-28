@@ -13,7 +13,6 @@ COMMANDES:
   broadcaster        Demarrer une station radio (serveur)
   client             Se connecter a une station (recepteur)
   play <query|url>   Ajouter et jouer une chanson
-  queue              Gerer la playlist (--add/--clear/--list)
   status             Afficher l'etat du broadcaster
   stop               Arreter la lecture
   volume <0.0-3.0>   Regler le volume (--local/--global)

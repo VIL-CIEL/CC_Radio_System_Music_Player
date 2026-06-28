@@ -4,6 +4,7 @@
 ]]
 local Downloader = require("core.downloader")
 local Audio      = require("core.audio")
+local Config     = require("lib.config")
 local CLI        = require("ui.cli") -- parseDuration
 local App        = require("ui.app")
 local GUI        = require("ui.gui")
@@ -95,17 +96,17 @@ function Player.runLocal(cfg, playlist)
       ctrl.prevReq = true; ctrl.skip = true; audio:stop(); os.queueEvent("rsmp_resume")
     elseif action == "volup" then audio:setVolume(audio.volume + 0.1)
     elseif action == "voldown" then audio:setVolume(audio.volume - 0.1)
-    elseif action == "loop" then playlist:cycleLoop(); playlist:save()
-    elseif action == "shuffle" then playlist:toggleShuffle(); playlist:save()
+    elseif action == "loop" then cfg.loop = playlist:cycleLoop(); Config.save(cfg)
+    elseif action == "shuffle" then cfg.shuffle = playlist:toggleShuffle(); Config.save(cfg)
     elseif action == "playnow" and args.song then
-      playlist:add(args.song, true); playlist:save()
+      playlist:add(args.song, true)
       ctrl.skip = true; audio:stop(); os.queueEvent("rsmp_resume"); os.queueEvent("queue_updated")
     elseif action == "playnext" and args.song then
-      playlist:add(args.song, true); playlist:save(); os.queueEvent("queue_updated")
+      playlist:add(args.song, true); os.queueEvent("queue_updated")
     elseif action == "enqueue" and args.song then
-      playlist:add(args.song); playlist:save(); os.queueEvent("queue_updated")
+      playlist:add(args.song); os.queueEvent("queue_updated")
     elseif action == "remove" and args.index then
-      table.remove(playlist.queue, args.index); playlist:save()
+      table.remove(playlist.queue, args.index)
     end
     return false
   end
@@ -133,7 +134,7 @@ function Player.runLocal(cfg, playlist)
   if guiMon then tasks[#tasks + 1] = function() App.monitor(ctx, guiMon) end end
   parallel.waitForAny(table.unpack(tasks))
 
-  audio:stop(); playlist:save()
+  audio:stop()
   App.cleanup(guiMon)
   print("Lecture terminee.")
 end
