@@ -134,7 +134,8 @@ function Player.runLocal(cfg, playlist)
   parallel.waitForAny(table.unpack(tasks))
 
   audio:stop(); playlist:save()
-  term.setBackgroundColor(colors.black); print(""); print("Lecture terminee.")
+  App.cleanup(guiMon)
+  print("Lecture terminee.")
 end
 
 return Player

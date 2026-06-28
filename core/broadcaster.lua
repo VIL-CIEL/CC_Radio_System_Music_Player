@@ -299,8 +299,7 @@ function Broadcaster.run(cfg, parsed)
   audio:stop()
   playlist:save()
   net:close()
-  term.setBackgroundColor(colors.black)
-  print("")
+  App.cleanup(guiMon)
   print("Broadcaster arrete.")
 end
 

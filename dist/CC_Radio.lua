@@ -843,7 +843,8 @@ function Player.runLocal(cfg, playlist)
   parallel.waitForAny(table.unpack(tasks))
 
   audio:stop(); playlist:save()
-  term.setBackgroundColor(colors.black); print(""); print("Lecture terminee.")
+  App.cleanup(guiMon)
+  print("Lecture terminee.")
 end
 
 return Player
@@ -1269,8 +1270,7 @@ function Broadcaster.run(cfg, parsed)
   audio:stop()
   playlist:save()
   net:close()
-  term.setBackgroundColor(colors.black)
-  print("")
+  App.cleanup(guiMon)
   print("Broadcaster arrete.")
 end
 
@@ -1479,8 +1479,7 @@ function Client.run(cfg, parsed)
 
   audio:stop()
   net:close()
-  term.setBackgroundColor(colors.black)
-  print("")
+  App.cleanup(guiMon)
   print("Client deconnecte.")
 end
 
@@ -2059,6 +2058,20 @@ local TABS = { "Now Playing", "Search", "Queue" }
 
 local function setColor(c) if term.isColor() then term.setTextColor(c) end end
 local function clear() term.setBackgroundColor(colors.black); term.clear() end
+
+--- Restaure un terminal (et un monitor) propres pour rendre la main au shell.
+function App.cleanup(mon)
+  term.setBackgroundColor(colors.black)
+  term.setTextColor(colors.white)
+  term.clear()
+  term.setCursorPos(1, 1)
+  if mon then
+    mon.setBackgroundColor(colors.black)
+    mon.setTextColor(colors.white)
+    mon.clear()
+    mon.setCursorPos(1, 1)
+  end
+end
 local function trunc(s, n) s = Utils.trim(s) or ""; if #s > n then return s:sub(1, n - 1) .. ">" end return s end
 
 -- ───────────────────────── Écran d'accueil ─────────────────────────
@@ -2088,21 +2101,24 @@ function App.home()
     end
   end
   draw()
-  while true do
+  local choice
+  while choice == nil do
     local ev = { os.pullEvent() }
     if ev[1] == "mouse_click" then
       local b = Widgets.hitTest(btns, ev[3], ev[4])
-      if b then return b.id ~= "quit" and b.id or nil end
+      if b then choice = b.id; break end
     elseif ev[1] == "char" then
       local c = ev[2]:lower()
-      if c == "b" then return "broadcaster"
-      elseif c == "c" then return "client"
-      elseif c == "l" then return "local"
-      elseif c == "q" then return nil end
+      if c == "b" then choice = "broadcaster"
+      elseif c == "c" then choice = "client"
+      elseif c == "l" then choice = "local"
+      elseif c == "q" then choice = "quit" end
     elseif ev[1] == "term_resize" then
       draw()
     end
   end
+  App.cleanup()
+  return choice ~= "quit" and choice or nil
 end
 
 -- ───────────────────────── Rendu des onglets ─────────────────────────

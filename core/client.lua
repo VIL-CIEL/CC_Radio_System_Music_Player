@@ -199,8 +199,7 @@ function Client.run(cfg, parsed)
 
   audio:stop()
   net:close()
-  term.setBackgroundColor(colors.black)
-  print("")
+  App.cleanup(guiMon)
   print("Client deconnecte.")
 end
 
